@@ -99,14 +99,14 @@ class ChatUI:
                 is_seen = msg.get("seen", False)
                 
                 if sender == "You":
-                    # Max width for bubbles is 2/3 of terminal
-                    bubble_width = min(width - 10, int(width * 0.7))
+                    # Max width for bubbles is 70% of terminal
+                    max_bubble_width = min(width - 10, int(width * 0.7))
                     seen_indicator = " ✓✓" if is_seen else ""
-                    p = Panel(Text(text + seen_indicator), border_style="blue", padding=(0, 1), title="[bold]You", title_align="right", width=bubble_width)
+                    p = Panel(Text(text + seen_indicator), border_style="blue", padding=(0, 1), title="[bold]You", title_align="right", expand=False)
                     console.print(Align.right(p, width=width))
                 elif sender == "Peer":
-                    bubble_width = min(width - 10, int(width * 0.7))
-                    p = Panel(Text(text), border_style="green", padding=(0, 1), title="[bold]Peer", title_align="left", width=bubble_width)
+                    max_bubble_width = min(width - 10, int(width * 0.7))
+                    p = Panel(Text(text), border_style="green", padding=(0, 1), title="[bold]Peer", title_align="left", expand=False)
                     console.print(Align.left(p, width=width))
                 else:
                     console.print(Align.center(Text(text, style="italic dim yellow")))
