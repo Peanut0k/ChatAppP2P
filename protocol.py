@@ -68,8 +68,8 @@ class ChatProtocol:
     def send_message(self, text):
         """Encrypts and sends a message with a unique ID."""
         import time
-        # Use simple timestamp-based ID
-        msg_id = str(int(time.time() * 1000))[-8:]
+        # Use nanosecond precision for unique ID, take last 10 digits
+        msg_id = str(time.time_ns())[-10:]
         self._send_raw(b'\x01' + msg_id.encode('utf-8') + b':' + text.encode('utf-8'))
         return msg_id
 

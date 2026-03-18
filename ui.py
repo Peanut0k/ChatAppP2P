@@ -37,6 +37,7 @@ class ChatUI:
         self.requested_resume_offset = 0
         self.last_update_time = 0
         self._stop_event = threading.Event()
+        self.resume_event = threading.Event()
         self.app = None
         self.send_callback = None
         self.resume_callback = None
@@ -245,6 +246,9 @@ class ChatUI:
                         incoming_file = None
                     elif msg_type == "read_ack":
                         self._mark_message_seen(content)
+                    elif msg_type == "file_resume":
+                        self.requested_resume_offset = content
+                        self.resume_event.set() # Wake up the sender
                     elif msg_type is None:
                         self.is_online = False
                         self.add_message("System", "Peer disconnected. Waiting for auto-reconnect...")

@@ -118,16 +118,16 @@ def main():
 
                     # 2. Start Handshake
                     proto.send_file_start(filename, size, f_hash)
+                    # 3. Wait for Resume Offset (Event-based Handshake)
+                    ui.resume_event.clear()
                     progress_id = ui.add_message("System", f"📤 Negotiating connection for {filename}...")
                     
-                    # 3. Wait for Resume Offset (Synchronous Handshake)
-                    start_wait = time.time()
-                    ui.requested_resume_offset = -1 # Special signal
-                    while ui.requested_resume_offset == -1 and time.time() - start_wait < 5:
-                        time.sleep(0.1)
+                    # Wait for receiver to signal offset (up to 10s)
+                    if not ui.resume_event.wait(10.0):
+                        ui.add_message("System", f"⚠️ Handshake timeout for {filename}. Defaulting to start.")
                     
                     off = ui.requested_resume_offset if ui.requested_resume_offset >= 0 else 0
-                    ui.requested_resume_offset = 0 # reset
+                    ui.resume_event.clear()
                     
                     from transport import format_size
                     tot_str = format_size(size)
