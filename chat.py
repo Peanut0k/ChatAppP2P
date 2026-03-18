@@ -106,7 +106,9 @@ def main():
     except KeyboardInterrupt:
         print("\nExiting...")
     except Exception as e:
-        print(f"\nError: {e}")
+        import traceback
+        print(f"\n❌ Error: {e}")
+        traceback.print_exc()
     finally:
         if 'trans' in locals():
             trans.close()

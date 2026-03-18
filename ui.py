@@ -35,7 +35,7 @@ class ChatUI:
         # Use get_cursor_position to force the window to always be at the bottom
         self.history_control = FormattedTextControl(
             lambda: self._current_ansi,
-            get_cursor_position=lambda: Point(x=0, y=self._line_count)
+            get_cursor_position=lambda: Point(x=0, y=max(0, self._line_count - 1))
         )
 
     def add_message(self, sender, text):
