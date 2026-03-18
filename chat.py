@@ -172,15 +172,18 @@ def main():
                         try:
                             ui.add_message("System", "🎤 Recording... (Type /voice or press Enter to stop)")
                             if os.environ.get("TERMUX_VERSION"):
-                                 # Termux (Android) - Force WAV for compatibility
-                                 voice_ctx["proc"] = subprocess.Popen(["termux-microphone-record", "-f", str(out_path), "-e", "wav"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=os.setsid)
+                                # Termux (Android) - Force WAV for compatibility
+                                voice_ctx["proc"] = subprocess.Popen(["termux-microphone-record", "-f", str(out_path), "-e", "wav"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=os.setsid)
+                            elif platform.system() == "Windows":
+                                # Windows (FFMPEG) - Use 'dshow' to list devices and record
+                                voice_ctx["proc"] = subprocess.Popen(["ffmpeg", "-f", "dshow", "-i", "audio=Microphone", "-ar", "16000", "-ac", "1", str(out_path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
                             elif platform.system() == "Linux":
-                                 # Linux (ALSA) - Standardize to 16kHz Mono to avoid noise on Android/Arch
-                                 voice_ctx["proc"] = subprocess.Popen(["arecord", "-f", "S16_LE", "-r", "16000", "-c", "1", str(out_path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=os.setsid)
+                                # Linux (ALSA) - Standardize to 16kHz Mono to avoid noise on Android/Arch
+                                voice_ctx["proc"] = subprocess.Popen(["arecord", "-f", "S16_LE", "-r", "16000", "-c", "1", str(out_path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=os.setsid)
                             else:
-                                 ui.add_message("System", "⚠️ Voice recording not yet supported on this platform.")
-                                 ui.is_recording = False
-                                 return
+                                ui.add_message("System", "⚠️ Voice recording not yet supported on this platform.")
+                                ui.is_recording = False
+                                return
                         except Exception as e:
                             ui.add_message("System", f"❌ Recording failed to start: {e}")
                             ui.is_recording = False

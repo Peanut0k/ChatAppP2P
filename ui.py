@@ -450,6 +450,10 @@ class ChatUI:
                         subprocess.run(["ffplay", "-nodisp", "-autoexit", str(target_path)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                     else:
                         subprocess.run(["aplay", "-q", str(target_path)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                elif platform.system() == "Windows":
+                    # Use PowerShell for native wav playback
+                    ps_cmd = f"(New-Object System.Media.SoundPlayer '{target_path}').PlaySync()"
+                    subprocess.run(["powershell", "-Command", ps_cmd], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 
                 # Auto-delete after playing
                 if os.path.exists(target_path): os.remove(target_path)
