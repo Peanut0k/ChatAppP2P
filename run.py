@@ -39,18 +39,29 @@ def ensure_venv():
     return venv_python
 
 def check_deps(py_exec):
-    print("📦 Checking dependencies...")
-    # Fast check: skip pip if already installed to avoid network-hangs
+    print("📦 Checking Python dependencies...")
     try:
-        import rich, prompt_toolkit, cryptography
-        return 
+        import rich, prompt_toolkit, cryptography, psutil
+        # If all imports work, we still might want to check for updates or missing libs
     except ImportError:
-        pass
+        print("📥 Installing missing Python libraries...")
+        try:
+            subprocess.check_call([py_exec, "-m", "pip", "install", "rich", "prompt_toolkit", "cryptography", "psutil"])
+        except Exception as e:
+            print(f"⚠️ Warning: Could not auto-install dependencies: {e}")
 
-    try:
-        subprocess.check_call([py_exec, "-m", "pip", "install", "--disable-pip-version-check", "rich", "prompt_toolkit", "cryptography"])
-    except Exception as e:
-        print(f"Warning: Could not auto-install dependencies: {e}")
+    print("🔍 Checking system dependencies...")
+    missing_bins = []
+    for b in ["ffmpeg", "ffplay"]:
+        if not shutil.which(b):
+            missing_bins.append(b)
+    
+    if missing_bins:
+        print(f"⚠️  Note: Some voice features may not work because {', '.join(missing_bins)} are missing.")
+        if platform.system() == "Windows":
+             print("👉 Tip: Install FFmpeg via 'winget install ffmpeg' or from ffmpeg.org")
+        elif platform.system() == "Linux":
+             print("👉 Tip: Install via 'sudo apt install ffmpeg' or your package manager.")
 
 def main():
     if IS_TERMUX:
@@ -59,13 +70,13 @@ def main():
     else:
         py_exec = ensure_venv()
         
+    check_deps(py_exec)
+    
     # If we just switched to a venv, re-run with current args
     if py_exec != sys.executable:
         print("🚀 Switching to environment and starting...")
-        subprocess.run([py_exec, __file__] + sys.argv[1:])
+        subprocess.run([py_exec, "chat.py"] + sys.argv[1:])
         sys.exit(0)
-
-    check_deps(py_exec)
     print("🚀 Starting ChatApp...")
     
     cmd = [sys.executable, "chat.py"] + sys.argv[1:]

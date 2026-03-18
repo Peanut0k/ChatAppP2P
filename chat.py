@@ -160,7 +160,7 @@ def main():
                 voice_ctx = {"proc": None, "path": None}
 
                 def handle_voice_record(is_start):
-                    import subprocess, os, platform, signal, time
+                    import subprocess, os, platform, time
                     from pathlib import Path
                     
                     if is_start:
@@ -170,16 +170,28 @@ def main():
                         voice_ctx["path"] = out_path
                         
                         try:
-                            ui.add_message("System", "🎤 Recording... (Type /voice or press Enter to stop)")
                             if os.environ.get("TERMUX_VERSION"):
-                                # Termux (Android) - Force WAV for compatibility
-                                voice_ctx["proc"] = subprocess.Popen(["termux-microphone-record", "-f", str(out_path), "-e", "wav"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=os.setsid)
+                                ui.add_message("System", "🎤 Recording via Termux API...")
+                                voice_ctx["proc"] = subprocess.Popen(["termux-microphone-record", "-f", str(out_path), "-e", "wav"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                             elif platform.system() == "Windows":
-                                # Windows (FFMPEG) - Use 'dshow' to list devices and record
-                                voice_ctx["proc"] = subprocess.Popen(["ffmpeg", "-f", "dshow", "-i", "audio=Microphone", "-ar", "16000", "-ac", "1", str(out_path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+                                ui.add_message("System", "🎤 Searching for recording device...")
+                                try:
+                                    dev_out = subprocess.check_output(["ffmpeg", "-list_devices", "true", "-f", "dshow", "-i", "dummy"], stderr=subprocess.STDOUT, text=True)
+                                except subprocess.CalledProcessError as e:
+                                    dev_out = e.output
+                                
+                                import re
+                                match = re.search(r'"([^"]*)" \(audio\)', dev_out)
+                                device_name = match.group(1) if match else "audio=Microphone"
+                                if not match:
+                                     match = re.search(r'"(.*Microphone.*)"', dev_out)
+                                     if match: device_name = match.group(1)
+
+                                ui.add_message("System", f"🎤 Recording via: {device_name}...")
+                                voice_ctx["proc"] = subprocess.Popen(["ffmpeg", "-y", "-f", "dshow", "-i", f"audio={device_name}", "-ar", "16000", "-ac", "1", "-t", "60", str(out_path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if platform.system() == "Windows" else 0)
                             elif platform.system() == "Linux":
-                                # Linux (ALSA) - Standardize to 16kHz Mono to avoid noise on Android/Arch
-                                voice_ctx["proc"] = subprocess.Popen(["arecord", "-f", "S16_LE", "-r", "16000", "-c", "1", str(out_path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=os.setsid)
+                                ui.add_message("System", "🎤 Recording via arecord...")
+                                voice_ctx["proc"] = subprocess.Popen(["arecord", "-f", "S16_LE", "-r", "16000", "-c", "1", str(out_path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=os.setsid if hasattr(os, 'setsid') else None)
                             else:
                                 ui.add_message("System", "⚠️ Voice recording not yet supported on this platform.")
                                 ui.is_recording = False
@@ -193,31 +205,44 @@ def main():
                             try:
                                 if os.environ.get("TERMUX_VERSION"):
                                     subprocess.run(["termux-microphone-record", "-q"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                                    time.sleep(0.5) # Allow header to finalize
+                                    time.sleep(0.5)
                                 else:
-                                    os.killpg(os.getpgid(voice_ctx["proc"].pid), signal.SIGINT)
+                                    # Use psutil for robust termination of the process and its children
+                                    try:
+                                        import psutil
+                                        parent = psutil.Process(voice_ctx["proc"].pid)
+                                        for child in parent.children(recursive=True):
+                                            child.terminate()
+                                        parent.terminate()
+                                    except ImportError:
+                                        # Fallback if psutil not available yet
+                                        if platform.system() == "Windows":
+                                            subprocess.run(["taskkill", "/F", "/T", "/PID", str(voice_ctx["proc"].pid)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                        else:
+                                            import signal
+                                            os.killpg(os.getpgid(voice_ctx["proc"].pid), signal.SIGINT)
+                                    
                                     voice_ctx["proc"].wait(timeout=2)
                                 
-                                # Force redraw to fix UI corruption
-                                if ui.app: ui.app.invalidate()
-                                
-                                ui.add_message("System", "✅ Recording finished! (Sent and purged locally)")
+                                ui.add_message("System", "✅ Recording finished! (Purging local copy after send)")
                                 
                                 path = voice_ctx["path"]
-                                if path and path.exists():
+                                time.sleep(0.5)
+                                if path and path.exists() and path.stat().st_size > 44:
                                     handle_file_send(str(path), path.name, path.stat().st_size)
                                     
-                                    # Auto-delete from sender's end (Retry loop for robustness)
                                     def purge_task(p):
                                         for _ in range(5):
                                             try:
-                                                time.sleep(2)
+                                                time.sleep(3)
                                                 if os.path.exists(p):
                                                     os.remove(p)
-                                                    break # Success!
-                                            except:
-                                                pass
+                                                    break
+                                            except: pass
+                                    import threading
                                     threading.Thread(target=purge_task, args=(str(path),), daemon=True).start()
+                                else:
+                                    ui.add_message("System", "⚠️ Recording was too short or failed.")
                             except Exception as e:
                                 ui.add_message("System", f"❌ Error stopping recording: {e}")
                             finally:

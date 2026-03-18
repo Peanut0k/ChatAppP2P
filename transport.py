@@ -175,28 +175,33 @@ def _scan_linux():
         return []
 
 def _scan_windows():
-    print("Scanning via PowerShell...")
+    print("Scanning via PowerShell (Paired/Known devices)...")
     try:
         # Use PowerShell to find paired or nearby devices
         # This snippet looks for devices in the PnP list (mostly paired)
-        # For full discovery, real Winsock calls are needed, but this is a good start for Win11
-        cmd = "Get-PnpDevice -Class Bluetooth | Select-Object FriendlyName, InstanceId"
+        # We also attempt to find 'Bluetooth' class devices specifically.
+        cmd = "Get-PnpDevice -Class Bluetooth -Status OK | Select-Object FriendlyName, InstanceId"
         output = subprocess.check_output(["powershell", "-Command", cmd], text=True)
         devices = []
         for line in output.split("\n"):
             line = line.strip()
             if not line or "FriendlyName" in line or "---" in line:
                 continue
+            
             # InstanceId often contains the MAC: BTHEN\DEV_AABBCCDDEEFF\...
-            parts = line.split()
-            name = " ".join(parts[:-1])
-            iid = parts[-1]
-            mac_match = re.search(r"DEV_([0-9A-F]{12})", iid, re.I)
+            # We use a more flexible regex to capture the MAC
+            mac_match = re.search(r"DEV_([0-9A-F]{12})", line, re.I)
             if mac_match:
                 raw_mac = mac_match.group(1)
-                # Format as AA:BB:CC:DD:EE:FF
                 mac = ":".join(raw_mac[i:i+2] for i in range(0, 12, 2))
+                # Friendly name is everything before the InstanceId
+                name = line[:line.find(mac_match.group(0))].strip()
+                if not name: name = "Unknown Device"
                 devices.append((mac, name))
+        
+        if not devices:
+            print("💡 Tip: On Windows, ensure your device is PAIRED first for reliable discovery.")
+            
         return devices
     except Exception as e:
         print(f"Windows scan error: {e}")

@@ -1,11 +1,19 @@
-import os
+import os, platform
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import x25519
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 from pathlib import Path
 
-IDENTITY_FILE = Path.home() / ".config" / "chatapp" / "identity.key"
+def get_config_dir():
+    if platform.system() == "Windows":
+        base = os.getenv("APPDATA")
+        if not base: base = str(Path.home() / "AppData" / "Roaming")
+        return Path(base) / "ChatApp"
+    else:
+        return Path.home() / ".config" / "chatapp"
+
+IDENTITY_FILE = get_config_dir() / "identity.key"
 
 def get_device_identity():
     """Returns (private_key, public_key) for the device, generating if needed."""

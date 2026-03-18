@@ -339,6 +339,14 @@ class ChatUI:
                     self.add_message("System", "  /voice - Toggle recording (Walkie-Talkie)")
                     self.add_message("System", "  /trust - Mark current peer as trusted")
                     self.add_message("System", "  /quit - Exit the application")
+                    
+                    # Diagnostics
+                    import shutil, platform
+                    diag = f"Platform: {platform.system()} "
+                    rec = "✅ REC: OK" if (shutil.which("ffmpeg") or shutil.which("arecord") or os.environ.get("TERMUX_VERSION")) else "❌ REC: Missing dependency"
+                    play = "✅ PLAY: OK" if (shutil.which("ffplay") or shutil.which("aplay") or platform.system() == "Windows" or os.environ.get("TERMUX_VERSION")) else "❌ PLAY: Missing dependency"
+                    self.add_message("System", f"Status: {diag} | {rec} | {play}")
+                    
                     input_field.text = ""
                     self._last_typing_state = False
                     if self.typing_callback: self.typing_callback(False)

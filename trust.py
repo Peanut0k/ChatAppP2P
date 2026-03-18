@@ -2,7 +2,16 @@ import json
 import os
 from pathlib import Path
 
-TRUST_FILE = Path.home() / ".config" / "chatapp" / "trusted_peers.json"
+import platform
+def get_config_dir():
+    if platform.system() == "Windows":
+        base = os.getenv("APPDATA")
+        if not base: base = str(Path.home() / "AppData" / "Roaming")
+        return Path(base) / "ChatApp"
+    else:
+        return Path.home() / ".config" / "chatapp"
+
+TRUST_FILE = get_config_dir() / "trusted_peers.json"
 
 def _ensure_dir():
     TRUST_FILE.parent.mkdir(parents=True, exist_ok=True)
