@@ -107,8 +107,13 @@ def start_client(server_mac, use_tcp=False):
         
     unblock_bluetooth()
     client_sock = socket.socket(AF_BLUETOOTH, socket.SOCK_STREAM, BTPROTO_RFCOMM)
-    client_sock.connect((server_mac, RFCOMM_CHANNEL))
-    return BluetoothTransport(client_sock)
+    client_sock.settimeout(10.0)
+    try:
+        client_sock.connect((server_mac, RFCOMM_CHANNEL))
+        client_sock.settimeout(None) # Reset to blocking after connect
+        return BluetoothTransport(client_sock)
+    except socket.timeout:
+        raise ConnectionError(f"Bluetooth connection to {server_mac} timed out.")
 
 def start_tcp_server():
     server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -123,8 +128,13 @@ def start_tcp_server():
 
 def start_tcp_client(server_ip):
     client_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client_sock.connect((server_ip, TCP_PORT))
-    return TCPTransport(client_sock)
+    client_sock.settimeout(10.0)
+    try:
+        client_sock.connect((server_ip, TCP_PORT))
+        client_sock.settimeout(None) # Reset to blocking after connect
+        return TCPTransport(client_sock)
+    except socket.timeout:
+        raise ConnectionError(f"TCP connection to {server_ip} timed out.")
 
 def scan_for_devices():
     if IS_WINDOWS: return _scan_windows()

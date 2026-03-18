@@ -40,12 +40,17 @@ def ensure_venv():
 
 def check_deps(py_exec):
     print("📦 Checking dependencies...")
-    # We use -m pip to ensure we target the right environment
+    # Fast check: skip pip if already installed to avoid network-hangs
     try:
-        subprocess.check_call([py_exec, "-m", "pip", "install", "rich", "prompt_toolkit", "cryptography"], 
-                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        import rich, prompt_toolkit, cryptography
+        return 
+    except ImportError:
+        pass
+
+    try:
+        subprocess.check_call([py_exec, "-m", "pip", "install", "--disable-pip-version-check", "rich", "prompt_toolkit", "cryptography"])
     except Exception as e:
-        print(f"Warning: Could not auto-install some dependencies: {e}")
+        print(f"Warning: Could not auto-install dependencies: {e}")
 
 def main():
     if IS_TERMUX:
