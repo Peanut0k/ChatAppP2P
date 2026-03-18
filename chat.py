@@ -104,6 +104,7 @@ def main():
                     tot_str = format_size(size)
                     progress_id = ui.add_message("System", f"📤 Sending: {filename} (0B / {tot_str}, 0%)")
                     sent_bytes = 0
+                    last_upd = 0
                     
                     with open(path, "rb") as f:
                         while True:
@@ -114,7 +115,9 @@ def main():
                             sent_bytes += len(chunk)
                             if size > 0:
                                 pct = int((sent_bytes / size) * 100)
-                                if pct % 5 == 0:
+                                now = time.time()
+                                if (pct % 5 == 0) and (now - last_upd > 0.25):
+                                    last_upd = now
                                     cur_str = format_size(sent_bytes)
                                     ui.update_message(progress_id, f"📤 Sending: {filename} ({cur_str} / {tot_str}, {pct}%)")
                     

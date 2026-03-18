@@ -34,6 +34,7 @@ class ChatUI:
         self.messages = []
         self.recv_progress_id = None
         self.total_received = 0
+        self.last_update_time = 0
         self._stop_event = threading.Event()
         self.app = None
         self.send_callback = None
@@ -193,7 +194,10 @@ class ChatUI:
                         self.total_received += len(content)
                         if file_meta['size'] > 0:
                             pct = int((self.total_received / file_meta['size']) * 100)
-                            if pct % 5 == 0:
+                            # Throttle: Update only if 5% passed AND it's been 0.25s
+                            now = time.time()
+                            if (pct % 5 == 0) and (now - self.last_update_time > 0.25):
+                                self.last_update_time = now
                                 from transport import format_size
                                 cur_str = format_size(self.total_received)
                                 tot_str = format_size(file_meta['size'])
