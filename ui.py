@@ -22,6 +22,7 @@ class ChatUI:
         self.safety_number = safety_number
         self.trust_status = trust_status 
         self.peer_typing = False
+        self.is_online = True
         self.is_recording = False
         self.explorer_visible = False
         self.explorer_path = None
