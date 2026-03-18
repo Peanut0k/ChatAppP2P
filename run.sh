@@ -3,43 +3,28 @@
 # --- 🔒 ChatApp Flawless Launcher (Linux/Android) ---
 
 VENV_DIR=".venv"
-if ! command -v $PYTHON_BIN &> /dev/null; then
-    echo "❌ Error: Python 3 is not installed."
-    exit 1
+IS_TERMUX=false
+if [ -d "/data/data/com.termux" ]; then IS_TERMUX=true; fi
+
+# 1. Termux Specific Setup
+if [ "$IS_TERMUX" = true ]; then
+    if ! command -v termux-bluetooth-scan &> /dev/null || ! python3 -c "import cryptography" &> /dev/null; then
+        echo "📦 Installing Android system dependencies (pkg)..."
+        pkg update -y && pkg install -y python-cryptography termux-api
+    fi
+    PYTHON_EXEC="python3"
+else
+    # 2. Linux Venv Setup
+    if [ ! -d "$VENV_DIR" ]; then
+        echo "🛠️ Creating virtual environment..."
+        python3 -m venv "$VENV_DIR"
+    fi
+    PYTHON_EXEC="$VENV_DIR/bin/python3"
 fi
 
-# 2. Create/Activate Virtual Environment
-if [ ! -d "$VENV_DIR" ]; then
-    echo "🛠️ Creating virtual environment..."
-    $PYTHON_BIN -m venv "$VENV_DIR"
-fi
-
-source "$VENV_DIR/bin/activate"
-
-# 3. Install Dependencies
+# 3. Install Python Dependencies
 echo "📦 Checking dependencies..."
-pip install -q -r requirements.txt
+$PYTHON_EXEC -m pip install rich prompt_toolkit cryptography &> /dev/null
 
-# 4. Handle Arguments
-case "$1" in
-    "server")
-        echo "🚀 Starting Server..."
-        python3 chat.py server
-        ;;
-    "client")
-        if [ -z "$2" ]; then
-            echo "❌ Error: Please provide the server's MAC address."
-            echo "Usage: ./run.sh client AA:BB:CC:DD:EE:FF"
-            exit 1
-        fi
-        echo "🚀 Starting Client... connecting to $2"
-        python3 chat.py client "$2"
-        ;;
-    *)
-        echo "📖 Usage:"
-        echo "  ./run.sh server         - Start waiting for a friend"
-        echo "  ./run.sh client <MAC>   - Connect to your friend's MAC address"
-        echo ""
-        echo "To find your MAC address, run: hciconfig"
-        ;;
-esac
+# 4. Launch App
+$PYTHON_EXEC chat.py "$@"

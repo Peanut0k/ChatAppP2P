@@ -9,52 +9,64 @@ A secure, peer-to-peer chat application that works without WiFi or Internet.
 - **Auto-Discovery**: Scans for nearby peers automatically (supports `bluetoothctl`, `termux-api`, and PowerShell).
 - **TCP Fallback**: Works over Bluetooth Tethering or WiFi if native sockets are restricted (common on Android).
 
-## Setup
+## 🚀 Zero-Config Setup
 
-1. **Prerequisites**:
-   - **Linux**: `bluez` installed.
-   - **Windows**: Windows 11 with Bluetooth enabled.
-   - **Android**: 
-     - Install [Termux](https://termux.dev/).
-     - Install [Termux:API](https://play.google.com/store/apps/details?id=com.termux.api) (for scanning).
-     - **Important**: Run these commands in Termux FIRST:
-       ```bash
-       pkg update
-       pkg install python-cryptography termux-api
-       ```
-   - **Python**: 3.11+
+The ChatApp now handles all its own dependencies and environments. You don't need to manually create virtual environments or install Python packages.
 
-2. **Installation**:
-   ```bash
-   # Clone the repo and enter the directory
-   # Then just run the universal launcher:
-   python3 run.py
-   ```
-   The launcher will check dependencies and guide you through any missing steps.
+### 1. Prerequisites
+- **Python**: 3.11 or higher installed on your system.
+- **Bluetooth**: Hardware enabled and discoverable.
 
-## How to Chat
+### 2. Launch the App
+Clone the repository and run the launcher for your operating system:
 
-### Step 1: Start the Server (Computer A)
-```bash
-python3 run.py server
-```
-*Note: On Android, the launcher will automatically suggest TCP mode if Bluetooth fails.*
-
-### Step 2: Start the Client (Computer B)
-Scan for the server:
-```bash
-python3 run.py client
-```
-
-### 📱 Android (No-Root) Tips
-Android restricts direct Bluetooth access for non-root apps. If native Bluetooth fails (which it usually does on Termux):
-1. Enable **Bluetooth Tethering** in Android Settings on the Server device.
-2. Connect the Client device to the Server's Bluetooth network.
-3. Start the server with `python3 run.py --tcp server`.
-4. Start the client with `python3 run.py --tcp client [Server_IP]`.
+*   **Linux / Android (Termux)**:
+    ```bash
+    ./run.sh server
+    ```
+*   **Windows**:
+    ```cmd
+    run.bat server
+    ```
+*   **Universal**:
+    ```bash
+    python3 run.py server
+    ```
+*The launcher will automatically create a virtual environment, install dependencies (including `pkg` dependencies on Termux), and start the app.*
 
 ---
 
-## Troubleshooting
-- **Termux**: Run `pkg install termux-api` if scanning doesn't work.
-- **Windows**: Ensure Bluetooth is "Discoverable" in Windows Settings.
+## 💬 How to Chat
+
+### Step 1: Start the Server (Computer A)
+Run the launcher in `server` mode:
+```bash
+./run.sh server
+```
+
+### Step 2: Start the Client (Computer B)
+Run the launcher in `client` mode. If you don't provide a MAC address, it will automatically scan for nearby devices:
+```bash
+./run.sh client
+```
+*Or connect directly:*
+```bash
+./run.sh client AA:BB:CC:DD:EE:FF
+```
+
+---
+
+## 📱 Android (Termux) Support
+Android restricts direct Bluetooth access for non-root apps. If native Bluetooth fails:
+1. Enable **Bluetooth Tethering** in Android Settings on the Server device.
+2. Connect the Client device to the Server's Bluetooth network.
+3. Use the `--tcp` flag:
+   - Server: `./run.sh --tcp server`
+   - Client: `./run.sh --tcp client [Server_IP]`
+
+---
+
+## 🛠️ Troubleshooting
+- **Linux**: Ensure your user is in the `bluetooth` group or use `sudo ./run.sh`.
+- **Windows**: Make sure Bluetooth is set to "Discoverable" in Windows settings.
+- **Termux**: If scanning fails, ensure you have the **Termux:API** app installed from the Play Store/F-Droid.
