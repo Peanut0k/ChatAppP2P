@@ -265,7 +265,6 @@ def main():
 
             except (ConnectionError, socket.error) as e:
                 print(f"\nConnection lost: {e}. Retrying in 5 seconds...")
-                import time
                 time.sleep(5)
                 continue
             finally:

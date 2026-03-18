@@ -1,6 +1,7 @@
 import crypto
 import trust
 import struct
+import time
 
 PROTOCOL_VERSION = 3
 
@@ -67,7 +68,6 @@ class ChatProtocol:
 
     def send_message(self, text):
         """Encrypts and sends a message with a unique ID."""
-        import time
         # Use nanosecond precision for unique ID, take last 10 digits
         msg_id = str(time.time_ns())[-10:]
         self._send_raw(b'\x01' + msg_id.encode('utf-8') + b':' + text.encode('utf-8'))
