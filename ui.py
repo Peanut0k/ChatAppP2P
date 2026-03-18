@@ -167,27 +167,8 @@ class ChatUI:
                         incoming_file.close()
                         self.add_message("System", f"✅ File received: {file_meta['name']}")
                         
-                        # Auto-play voice memos
                         if file_meta['name'].startswith("voice_") and file_meta['name'].endswith(".wav"):
-                            def play_task(path, name):
-                                import subprocess, os, platform, time
-                                try:
-                                    time.sleep(0.1) # Small delay to ensure file is closed
-                                    if not path.exists(): return
-
-                                    if os.environ.get("TERMUX_VERSION"):
-                                        subprocess.run(["termux-media-player", "play", str(path)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                                    elif platform.system() == "Linux":
-                                        import shutil
-                                        # Use ffplay if available (much more robust than aplay)
-                                        if shutil.which("ffplay"):
-                                            subprocess.run(["ffplay", "-nodisp", "-autoexit", str(path)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                                        else:
-                                            subprocess.run(["aplay", "-q", str(path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                                    
-                                    if self.app: self.app.invalidate()
-                                except: pass
-                            threading.Thread(target=play_task, args=(save_path, file_meta['name']), daemon=True).start()
+                            self.add_message("System", f"🎙️ Voice clip ready! Type /play to hear it.")
                             
                         incoming_file = None
                     elif msg_type == "read_ack":
@@ -269,7 +250,12 @@ class ChatUI:
                     input_field.text = ""
                     return True
 
-                if text.lower().startswith("/send "):
+                elif text.lower() == "/play":
+                    self._play_voice_clip()
+                    input_field.text = ""
+                    return True
+                
+                elif text.lower().startswith("/send "):
                     path = text[6:].strip()
                     self._start_file_send(path)
                     input_field.text = ""
@@ -302,7 +288,7 @@ class ChatUI:
             wrap_lines=True,
         )
 
-        legend_text = ANSI(" [dim]Legend: [Enter] Send/Stop | /send (Explorer) | /voice | /quit | /help[/]")
+        legend_text = ANSI(" [dim]Legend: [Enter] Send/Stop | /play | /send (Explorer) | /voice | /help[/]")
         
         root_container = HSplit([
             # Empty Window here acts as a spacer that pushes history to the bottom
@@ -360,6 +346,44 @@ class ChatUI:
             self.app.run()
         finally:
             self._stop_event.set()
+
+    def _play_voice_clip(self):
+        import os, subprocess, platform, threading, time
+        from pathlib import Path
+        
+        # Find the most recent voice file in the downloads folder
+        save_dir = Path.home() / "Downloads" / "ChatApp"
+        if not save_dir.exists():
+            self.add_message("System", "⚠️ No voice clips found.")
+            return
+            
+        voice_files = sorted([f for f in os.listdir(save_dir) if f.startswith("voice_") and f.endswith(".wav")])
+        if not voice_files:
+            self.add_message("System", "⚠️ No voice clips found to play.")
+            return
+            
+        target_file = save_dir / voice_files[-1]
+        
+        def play_task(path):
+            try:
+                self.add_message("System", f"🔊 Playing voice clip...")
+                if os.environ.get("TERMUX_VERSION"):
+                    subprocess.run(["termux-media-player", "play", str(path)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                elif platform.system() == "Linux":
+                    import shutil
+                    if shutil.which("ffplay"):
+                        subprocess.run(["ffplay", "-nodisp", "-autoexit", str(path)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    else:
+                        subprocess.run(["aplay", "-q", str(path)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                
+                # Auto-delete after playing
+                os.remove(path)
+                self.add_message("System", "🗑️ Voice clip played and deleted for privacy.")
+                if self.app: self.app.invalidate()
+            except Exception as e:
+                self.add_message("System", f"⚠️ Playback failed: {e}")
+
+        threading.Thread(target=play_task, args=(target_file,), daemon=True).start()
 
     def _open_file_explorer(self, path=None):
         import os
