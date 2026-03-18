@@ -1,6 +1,8 @@
 import os
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import x25519
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 from pathlib import Path
 
 IDENTITY_FILE = Path.home() / ".config" / "chatapp" / "identity.key"
