@@ -2,12 +2,10 @@
 
 A secure, "flawless" peer-to-peer chat application that works without WiFi or Internet.
 
-## ✨ New in Version 3.0
-- **📂 File Transfer**: Send any file encrypted over the air (`/send <path>`).
-- **🎙️ Walkie-Talkie Mode**: Send 5-second encrypted voice memos (`/voice`).
-- **✓ Read Receipts**: Real-time status (✓) when your friend sees your message.
-- **🕸️ Mesh Relay**: Bridge connections between Bluetooth and TCP nodes (`--relay`).
-- **🛡️ Identity Trust**: Permanent device identities that stick across restarts.
+## ✨ New in Version 3.1
+- **🎙️ Pro Walkie-Talkie**: `/voice` is now a toggle! Start and stop recording whenever you want.
+- **� Unique Files**: No more duplicate or overwritten voice memos.
+- **⚡ Async UI**: Recording and playback no longer freeze the chat.
 
 ## 🚀 Zero-Config Setup
 

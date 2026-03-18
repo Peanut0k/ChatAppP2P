@@ -99,28 +99,48 @@ def main():
                             proto.send_file_chunk(chunk)
                     proto.send_file_end()
 
-                def handle_voice_record():
-                    import subprocess, os, platform
+                voice_ctx = {"proc": None, "path": None}
+
+                def handle_voice_record(is_start):
+                    import subprocess, os, platform, signal, time
                     from pathlib import Path
-                    out_path = Path.home() / "Downloads" / "ChatApp" / "voice_memo.wav"
-                    out_path.parent.mkdir(parents=True, exist_ok=True)
                     
-                    try:
-                        ui.add_message("System", "🎤 Recording for 5 seconds...")
-                        if os.environ.get("TERMUX_VERSION"):
-                             # Termux (Android)
-                             subprocess.run(["termux-microphone-record", "-f", str(out_path), "-l", "5"], check=True)
-                        elif platform.system() == "Linux":
-                             # Linux (ALSA)
-                             subprocess.run(["arecord", "-d", "5", "-f", "cd", str(out_path)], check=True)
-                        else:
-                             ui.add_message("System", "⚠️ Voice recording not yet supported on this platform. Try /send.")
-                             return
+                    if is_start:
+                        timestamp = int(time.time())
+                        out_path = Path.home() / "Downloads" / "ChatApp" / f"voice_{timestamp}.wav"
+                        out_path.parent.mkdir(parents=True, exist_ok=True)
+                        voice_ctx["path"] = out_path
                         
-                        ui.add_message("System", "✅ Recording finished!")
-                        handle_file_send(str(out_path), "voice_memo.wav", out_path.stat().st_size)
-                    except Exception as e:
-                        ui.add_message("System", f"❌ Recording failed: {e}. Check your microphone settings.")
+                        try:
+                            ui.add_message("System", "🎤 Recording... (Type /voice or press Enter to stop)")
+                            if os.environ.get("TERMUX_VERSION"):
+                                 # Termux (Android)
+                                 voice_ctx["proc"] = subprocess.Popen(["termux-microphone-record", "-f", str(out_path)], preexec_fn=os.setsid)
+                            elif platform.system() == "Linux":
+                                 # Linux (ALSA)
+                                 voice_ctx["proc"] = subprocess.Popen(["arecord", "-f", "cd", str(out_path)], preexec_fn=os.setsid)
+                            else:
+                                 ui.add_message("System", "⚠️ Voice recording not yet supported on this platform.")
+                                 ui.is_recording = False
+                                 return
+                        except Exception as e:
+                            ui.add_message("System", f"❌ Recording failed to start: {e}")
+                            ui.is_recording = False
+                    else:
+                        # Stop recording
+                        if voice_ctx["proc"]:
+                            try:
+                                os.killpg(os.getpgid(voice_ctx["proc"].pid), signal.SIGINT)
+                                voice_ctx["proc"].wait(timeout=2)
+                                ui.add_message("System", "✅ Recording finished!")
+                                
+                                path = voice_ctx["path"]
+                                if path.exists():
+                                    handle_file_send(str(path), path.name, path.stat().st_size)
+                            except Exception as e:
+                                ui.add_message("System", f"❌ Error stopping recording: {e}")
+                            finally:
+                                voice_ctx["proc"] = None
 
                 ui.start(
                     send_callback=lambda text: proto.send_message(text),

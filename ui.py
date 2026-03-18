@@ -22,7 +22,11 @@ class ChatUI:
         self.safety_number = safety_number
         self.trust_status = trust_status 
         self.peer_typing = False
-        self.is_online = True
+        self.is_recording = False
+        self.explorer_visible = False
+        self.explorer_path = None
+        self.explorer_selection = 0
+        self.explorer_items = []
         self.messages = []
         self._stop_event = threading.Event()
         self.app = None
@@ -68,6 +72,8 @@ class ChatUI:
         signal_icon = "📶" if self.is_online else "⚠️ [bold red]DISCONNECTED[/]"
         typing_text = " [italic cyan]... is typing[/]" if self.peer_typing else ""
         header_text = f"🔒 {self.role} • {self.peer_mac} • {trust_icon} {self.trust_status.upper()} • {signal_icon}{typing_text}"
+        if self.is_recording:
+             header_text += " [bold blink red]● REC[/]"
         
         if self.trust_status == "untrusted":
              header_text += " [bold blink red](!) WARNING: IDENTITY CHANGED"
@@ -75,25 +81,34 @@ class ChatUI:
         console.print(Text.from_markup(header_text, style="bold cyan dim"))
         console.print(" " * width) # Spacer
         
-        # Messages rendered as bubbles
-        for msg in self.messages:
-            sender = msg["sender"]
-            text = msg["text"]
-            is_seen = msg.get("seen", False)
-            
-            if sender == "You":
-                # Max width for bubbles is 2/3 of terminal
-                bubble_width = min(width - 10, int(width * 0.7))
-                seen_indicator = "[green] ✓[/]" if is_seen else ""
-                p = Panel(Text(text + seen_indicator), border_style="blue", padding=(0, 1), title="[bold]You", title_align="right", width=bubble_width)
-                console.print(Align.right(p, width=width))
-            elif sender == "Peer":
-                bubble_width = min(width - 10, int(width * 0.7))
-                p = Panel(Text(text), border_style="green", padding=(0, 1), title="[bold]Peer", title_align="left", width=bubble_width)
-                console.print(Align.left(p, width=width))
-            else:
-                console.print(Align.center(Text(text, style="italic dim yellow")))
-            console.print(" ") # Space between bubbles
+        # Messages or Explorer?
+        if self.explorer_visible:
+            console.print(Align.center(Panel(Text(f"📂 Select File: {self.explorer_path}", style="bold yellow"), border_style="yellow")))
+            for i, (name, is_dir) in enumerate(self.explorer_items):
+                prefix = "> " if i == self.explorer_selection else "  "
+                icon = "📁" if is_dir else "📄"
+                style = "bold cyan" if i == self.explorer_selection else ("dim" if not is_dir else "")
+                console.print(Text(f"{prefix}{icon} {name}", style=style))
+        else:
+            # Messages rendered as bubbles
+            for msg in self.messages:
+                sender = msg["sender"]
+                text = msg["text"]
+                is_seen = msg.get("seen", False)
+                
+                if sender == "You":
+                    # Max width for bubbles is 2/3 of terminal
+                    bubble_width = min(width - 10, int(width * 0.7))
+                    seen_indicator = " [green]✓✓[/]" if is_seen else ""
+                    p = Panel(Text(text + seen_indicator), border_style="blue", padding=(0, 1), title="[bold]You", title_align="right", width=bubble_width)
+                    console.print(Align.right(p, width=width))
+                elif sender == "Peer":
+                    bubble_width = min(width - 10, int(width * 0.7))
+                    p = Panel(Text(text), border_style="green", padding=(0, 1), title="[bold]Peer", title_align="left", width=bubble_width)
+                    console.print(Align.left(p, width=width))
+                else:
+                    console.print(Align.center(Text(text, style="italic dim yellow")))
+                console.print(" ") # Space between bubbles
 
         # Safety number at bottom of history
         console.print("-" * width, style="dim")
@@ -151,11 +166,11 @@ class ChatUI:
                         self.add_message("System", f"✅ File received: {file_meta['name']}")
                         
                         # Auto-play voice memos
-                        if file_meta['name'] == "voice_memo.wav":
+                        if file_meta['name'].startswith("voice_") and file_meta['name'].endswith(".wav"):
                             def play_task():
                                 import subprocess, os, platform
                                 try:
-                                    save_path = Path.home() / "Downloads" / "ChatApp" / "voice_memo.wav"
+                                    save_path = Path.home() / "Downloads" / "ChatApp" / file_meta['name']
                                     if os.environ.get("TERMUX_VERSION"):
                                         subprocess.run(["termux-media-player", "play", str(save_path)], check=True)
                                     elif platform.system() == "Linux":
@@ -183,10 +198,13 @@ class ChatUI:
         threading.Thread(target=recv_thread, daemon=True).start()
 
         # Input Area
+        from prompt_toolkit.completion import PathCompleter
         input_field = TextArea(
             height=3,
             prompt="You: ",
             multiline=False,
+            completer=PathCompleter(),
+            complete_while_typing=True,
         )
 
         # Typing notification logic
@@ -202,6 +220,17 @@ class ChatUI:
 
         def accept_text(buffer):
             text = input_field.text.strip()
+            
+            # Simple Enter-to-Stop for Voice
+            if self.is_recording:
+                 self.is_recording = False
+                 if self.voice_record_callback:
+                     self.voice_record_callback(False)
+                 self._update_history()
+                 if self.app: self.app.invalidate()
+                 input_field.text = ""
+                 return True
+
             if text:
                 if text.lower() in ["/quit", "/exit"]:
                     self._stop_event.set()
@@ -215,15 +244,35 @@ class ChatUI:
                         return True
                 
                 if text.lower() == "/voice":
+                    self.is_recording = True
                     if self.voice_record_callback:
-                        self.voice_record_callback()
-                        input_field.text = ""
-                        return True
+                        self.voice_record_callback(True)
+                    self._update_history()
+                    if self.app: self.app.invalidate()
+                    input_field.text = ""
+                    return True
+
+                if text.lower() == "/send":
+                    # Trigger File Explorer
+                    self._open_file_explorer()
+                    input_field.text = ""
+                    return True
 
                 if text.lower().startswith("/send "):
                     path = text[6:].strip()
                     self._start_file_send(path)
                     input_field.text = ""
+                    return True
+
+                if text.lower() in ["/help", "/?"]:
+                    self.add_message("System", "Available Commands:")
+                    self.add_message("System", "  /send <path> - Send a file securely")
+                    self.add_message("System", "  /voice - Toggle recording (Walkie-Talkie)")
+                    self.add_message("System", "  /trust - Mark current peer as trusted")
+                    self.add_message("System", "  /quit - Exit the application")
+                    input_field.text = ""
+                    self._last_typing_state = False
+                    if self.typing_callback: self.typing_callback(False)
                     return True
 
                 msg_id = self.send_callback(text)
@@ -234,8 +283,6 @@ class ChatUI:
                     self.typing_callback(False)
             return True
 
-        input_field.accept_handler = accept_text
-
         # Layout
         # Use a Window around the FormattedTextControl for scrolling
         self.history_window = Window(
@@ -244,12 +291,15 @@ class ChatUI:
             wrap_lines=True,
         )
 
+        legend_text = ANSI(" [dim]Legend: [Enter] Send/Stop | /send (Explorer) | /voice | /quit | /help[/]")
+        
         root_container = HSplit([
             # Empty Window here acts as a spacer that pushes history to the bottom
             Window(), 
             self.history_window,
             Window(height=1, char="─", style="dim"),
             input_field,
+            Window(height=1, content=FormattedTextControl(lambda: legend_text), style="dim cyan"),
         ])
 
         # Key Bindings
@@ -258,6 +308,34 @@ class ChatUI:
         def _(event):
             self._stop_event.set()
             event.app.exit()
+
+        @kb.add("up")
+        def _(event):
+            if self.explorer_visible:
+                self._handle_explorer_key("up")
+            else:
+                event.current_buffer.history_backward()
+
+        @kb.add("down")
+        def _(event):
+            if self.explorer_visible:
+                self._handle_explorer_key("down")
+            else:
+                event.current_buffer.history_forward()
+
+        @kb.add("enter")
+        def _(event):
+            if self.explorer_visible:
+                self._handle_explorer_key("enter")
+            else:
+                accept_text(event.current_buffer)
+
+        @kb.add("escape")
+        def _(event):
+            if self.explorer_visible:
+                self.explorer_visible = False
+                self._update_history()
+                if self.app: self.app.invalidate()
 
         # Application
         self.app = Application(
@@ -272,7 +350,53 @@ class ChatUI:
         finally:
             self._stop_event.set()
 
-    def _start_file_send(self, path):
+    def _open_file_explorer(self, path=None):
+        import os
+        from pathlib import Path
+        self.explorer_path = Path(path or os.getcwd()).resolve()
+        self.explorer_visible = True
+        self.explorer_selection = 0
+        self._update_explorer_items()
+        self._update_history()
+        if self.app: self.app.invalidate()
+
+    def _update_explorer_items(self):
+        import os
+        try:
+            items = []
+            # Add ".." to go up
+            items.append(("..", True)) 
+            for entry in os.scandir(self.explorer_path):
+                items.append((entry.name, entry.is_dir()))
+            # Sort: Directories first, then files
+            self.explorer_items = sorted(items, key=lambda x: (not x[1], x[0].lower()))
+        except Exception as e:
+            self.add_message("System", f"Explorer Error: {e}")
+            self.explorer_visible = False
+
+    def _handle_explorer_key(self, key):
+        if key == "up":
+            self.explorer_selection = max(0, self.explorer_selection - 1)
+        elif key == "down":
+            self.explorer_selection = min(len(self.explorer_items) - 1, self.explorer_selection + 1)
+        elif key == "enter":
+            name, is_dir = self.explorer_items[self.explorer_selection]
+            if is_dir:
+                if name == "..":
+                    self._open_file_explorer(self.explorer_path.parent)
+                else:
+                    self._open_file_explorer(self.explorer_path / name)
+                return
+            else:
+                # File selected!
+                target_path = self.explorer_path / name
+                self.explorer_visible = False
+                self._start_file_send(str(target_path))
+        elif key == "escape":
+            self.explorer_visible = False
+        
+        self._update_history()
+        if self.app: self.app.invalidate()
         import os, threading
         if not os.path.exists(path):
             self.add_message("System", f"❌ File not found: {path}")
