@@ -120,6 +120,8 @@ class ChatProtocol:
             return "read_ack", payload.decode('utf-8')
         elif msg_type == 7: # FILE Resume Request
             return "file_resume", struct.unpack(">Q", payload)[0]
+        elif msg_type == 8: # VOICE Played Ack
+            return "voice_ack", payload.decode('utf-8')
         
         return "unknown", payload
 
@@ -139,3 +141,6 @@ class ChatProtocol:
 
     def send_file_resume(self, offset):
         self._send_raw(b'\x07' + struct.pack(">Q", offset))
+
+    def send_voice_ack(self, filename):
+        self._send_raw(b'\x08' + filename.encode('utf-8'))

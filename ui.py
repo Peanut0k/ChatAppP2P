@@ -145,7 +145,8 @@ class ChatUI:
                     max_bw = min(width - 10, int(width * 0.7))
                     projected_width = len(text) + 4
                     p_width = max_bw if projected_width > max_bw else None
-                    p = Panel(Text(text), border_style="green", padding=(0, 1), title="[bold]The Other Guy", title_align="left", width=p_width, expand=False)
+                    heard_indicator = " [bold green][Heard][/]" if msg.get("played", False) else ""
+                    p = Panel(Text(text + heard_indicator), border_style="green", padding=(0, 1), title="[bold]The Other Guy", title_align="left", width=p_width, expand=False)
                     console.print(Align.left(p, width=width))
                 else:
                     console.print(Align.center(Text(text, style="italic dim yellow")))
@@ -165,9 +166,10 @@ class ChatUI:
         if self.app:
             self.app.invalidate()
 
-    def start(self, send_callback, receive_callback, trust_callback=None, typing_callback=None, file_send_callback=None, ack_callback=None, voice_record_callback=None, resume_callback=None):
+    def start(self, send_callback, receive_callback, trust_callback=None, typing_callback=None, file_send_callback=None, ack_callback=None, voice_record_callback=None, resume_callback=None, voice_ack_callback=None):
         self.send_callback = send_callback
         self.resume_callback = resume_callback
+        self.voice_ack_callback = voice_ack_callback
         self.trust_callback = trust_callback
         self.typing_callback = typing_callback
         self.file_send_callback = file_send_callback
@@ -263,6 +265,8 @@ class ChatUI:
                         incoming_file = None
                     elif msg_type == "read_ack":
                         self._mark_message_seen(content)
+                    elif msg_type == "voice_ack":
+                        self._mark_voice_played(content)
                     elif msg_type == "file_resume":
                         self.requested_resume_offset = content
                         self.resume_event.set() # Wake up the sender
@@ -485,11 +489,22 @@ class ChatUI:
         finally:
             self._stop_event.set()
 
+    def _mark_voice_played(self, filename):
+        updated = False
+        for msg in self.messages:
+            if filename in msg.get("text", ""):
+                 msg["played"] = True
+                 updated = True
+        if updated: self._update_history()
+
     def _play_voice_clip(self, path):
         import os, subprocess, platform, threading, time
         
         def play_task(target_path):
             try:
+                filename = os.path.basename(target_path)
+                if self.voice_ack_callback: self.voice_ack_callback(filename)
+                
                 self.add_message("System", f"🔊 Playing voice clip...")
                 if os.environ.get("TERMUX_VERSION"):
                     subprocess.run(["termux-media-player", "play", str(target_path)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

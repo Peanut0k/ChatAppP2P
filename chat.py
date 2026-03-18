@@ -210,53 +210,46 @@ def main():
                             ui.add_message("System", f"❌ Recording failed to start: {e}")
                             ui.is_recording = False
                     else:
-                        # Stop recording
-                        if voice_ctx["proc"] or os.environ.get("TERMUX_VERSION"):
-                            try:
-                                if os.environ.get("TERMUX_VERSION"):
-                                    subprocess.run(["termux-microphone-record", "-q"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        # Stop recording - move to background thread to avoid UI lag
+                        def stop_task():
+                             try:
+                                if voice_ctx["proc"] or os.environ.get("TERMUX_VERSION"):
+                                    if os.environ.get("TERMUX_VERSION"):
+                                        subprocess.run(["termux-microphone-record", "-q"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                        time.sleep(0.5)
+                                    else:
+                                        try:
+                                            import psutil
+                                            parent = psutil.Process(voice_ctx["proc"].pid)
+                                            for child in parent.children(recursive=True): child.terminate()
+                                            parent.terminate()
+                                        except:
+                                            if platform.system() == "Windows":
+                                                subprocess.run(["taskkill", "/F", "/T", "/PID", str(voice_ctx["proc"].pid)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                            else:
+                                                import signal
+                                                os.killpg(os.getpgid(voice_ctx["proc"].pid), signal.SIGINT)
+                                        voice_ctx["proc"].wait(timeout=2)
+                                    
+                                    ui.add_message("System", "✅ Recording finished! Processing...")
+                                    path = voice_ctx["path"]
                                     time.sleep(0.5)
-                                else:
-                                    # Use psutil for robust termination of the process and its children
-                                    try:
-                                        import psutil
-                                        parent = psutil.Process(voice_ctx["proc"].pid)
-                                        for child in parent.children(recursive=True):
-                                            child.terminate()
-                                        parent.terminate()
-                                    except ImportError:
-                                        # Fallback if psutil not available yet
-                                        if platform.system() == "Windows":
-                                            subprocess.run(["taskkill", "/F", "/T", "/PID", str(voice_ctx["proc"].pid)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                                        else:
-                                            import signal
-                                            os.killpg(os.getpgid(voice_ctx["proc"].pid), signal.SIGINT)
-                                    
-                                    voice_ctx["proc"].wait(timeout=2)
-                                
-                                ui.add_message("System", "✅ Recording finished! (Purging local copy after send)")
-                                
-                                path = voice_ctx["path"]
-                                time.sleep(0.5)
-                                if path and path.exists() and path.stat().st_size > 44:
-                                    handle_file_send(str(path), path.name, path.stat().st_size)
-                                    
-                                    def purge_task(p):
-                                        for _ in range(5):
+                                    if path and path.exists() and path.stat().st_size > 44:
+                                        handle_file_send(str(path), path.name, path.stat().st_size)
+                                        def purge_task(p):
+                                            time.sleep(10)
                                             try:
-                                                time.sleep(3)
-                                                if os.path.exists(p):
-                                                    os.remove(p)
-                                                    break
+                                                if os.path.exists(p): os.remove(p)
                                             except: pass
-                                    import threading
-                                    threading.Thread(target=purge_task, args=(str(path),), daemon=True).start()
-                                else:
-                                    ui.add_message("System", "⚠️ Recording was too short or failed.")
-                            except Exception as e:
-                                ui.add_message("System", f"❌ Error stopping recording: {e}")
-                            finally:
-                                voice_ctx["proc"] = None
+                                        threading.Thread(target=purge_task, args=(str(path),), daemon=True).start()
+                                    else:
+                                        ui.add_message("System", "⚠️ Recording was too short or failed.")
+                             except Exception as e:
+                                 ui.add_message("System", f"❌ Error finishing recording: {e}")
+                             finally:
+                                 voice_ctx["proc"] = None
+                        
+                        threading.Thread(target=stop_task, daemon=True).start()
 
                 ui.start(
                     send_callback=lambda text: proto.send_message(text),
@@ -266,7 +259,8 @@ def main():
                     file_send_callback=handle_file_send,
                     ack_callback=lambda mid: proto.send_read_ack(mid),
                     voice_record_callback=handle_voice_record,
-                    resume_callback=lambda off: proto.send_file_resume(off)
+                    resume_callback=lambda off: proto.send_file_resume(off),
+                    voice_ack_callback=lambda fname: proto.send_voice_ack(fname)
                 )
                 
                 # If UI exits normally (via /quit), break out of loop
