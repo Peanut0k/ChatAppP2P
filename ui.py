@@ -38,11 +38,21 @@ class ChatUI:
             get_cursor_position=lambda: Point(x=0, y=max(0, self._line_count - 1))
         )
 
-    def add_message(self, sender, text):
-        self.messages.append((sender, text))
+    def add_message(self, sender, text, msg_id=None, is_seen=False):
+        self.messages.append({"sender": sender, "text": text, "id": msg_id, "seen": is_seen})
         self._update_history()
         if self.app:
             self.app.invalidate()
+
+    def _mark_message_seen(self, msg_id):
+        updated = False
+        for msg in self.messages:
+            if msg["id"] == msg_id:
+                msg["seen"] = True
+                updated = True
+        if updated:
+            self._update_history()
+            if self.app: self.app.invalidate()
 
     def _update_history(self):
         """Builds the full chat history in Rich and converts to ANSI."""
@@ -66,11 +76,16 @@ class ChatUI:
         console.print(" " * width) # Spacer
         
         # Messages rendered as bubbles
-        for sender, text in self.messages:
+        for msg in self.messages:
+            sender = msg["sender"]
+            text = msg["text"]
+            is_seen = msg.get("seen", False)
+            
             if sender == "You":
                 # Max width for bubbles is 2/3 of terminal
                 bubble_width = min(width - 10, int(width * 0.7))
-                p = Panel(Text(text), border_style="blue", padding=(0, 1), title="[bold]You", title_align="right", width=bubble_width)
+                seen_indicator = "[green] ✓[/]" if is_seen else ""
+                p = Panel(Text(text + seen_indicator), border_style="blue", padding=(0, 1), title="[bold]You", title_align="right", width=bubble_width)
                 console.print(Align.right(p, width=width))
             elif sender == "Peer":
                 bubble_width = min(width - 10, int(width * 0.7))
@@ -88,10 +103,13 @@ class ChatUI:
         self._current_ansi = ANSI(raw_text)
         self._line_count = raw_text.count('\n') + 1
 
-    def start(self, send_callback, receive_callback, trust_callback=None, typing_callback=None):
+    def start(self, send_callback, receive_callback, trust_callback=None, typing_callback=None, file_send_callback=None, ack_callback=None, voice_record_callback=None):
         self.send_callback = send_callback
         self.trust_callback = trust_callback
         self.typing_callback = typing_callback
+        self.file_send_callback = file_send_callback
+        self.ack_callback = ack_callback
+        self.voice_record_callback = voice_record_callback
         
         if self.trust_status == "new":
             self.add_message("System", "This is a new peer. Type /trust to mark as trusted.")
@@ -101,16 +119,53 @@ class ChatUI:
         self._update_history() # Initial render
 
         def recv_thread():
+            incoming_file = None
+            file_meta = None
+            
             while not self._stop_event.is_set():
                 try:
                     msg_type, content = receive_callback()
                     if msg_type == "text":
+                        msg_id, text = content
                         self.peer_typing = False
-                        self.add_message("Peer", content)
+                        self.add_message("Peer", text)
+                        # Send Read receipt
+                        if msg_id and self.ack_callback:
+                            self.ack_callback(msg_id)
                     elif msg_type == "typing":
                         self.peer_typing = content
                         self._update_history()
                         if self.app: self.app.invalidate()
+                    elif msg_type == "file_start":
+                        file_meta = content
+                        from pathlib import Path
+                        save_dir = Path.home() / "Downloads" / "ChatApp"
+                        save_dir.mkdir(parents=True, exist_ok=True)
+                        save_path = save_dir / file_meta["name"]
+                        incoming_file = open(save_path, "wb")
+                        self.add_message("System", f"📥 Receiving file: {file_meta['name']} ({file_meta['size']} bytes)...")
+                    elif msg_type == "file_chunk" and incoming_file:
+                        incoming_file.write(content)
+                    elif msg_type == "file_end" and incoming_file:
+                        incoming_file.close()
+                        self.add_message("System", f"✅ File received: {file_meta['name']}")
+                        
+                        # Auto-play voice memos
+                        if file_meta['name'] == "voice_memo.wav":
+                            def play_task():
+                                import subprocess, os, platform
+                                try:
+                                    save_path = Path.home() / "Downloads" / "ChatApp" / "voice_memo.wav"
+                                    if os.environ.get("TERMUX_VERSION"):
+                                        subprocess.run(["termux-media-player", "play", str(save_path)], check=True)
+                                    elif platform.system() == "Linux":
+                                        subprocess.run(["aplay", str(save_path)], check=True)
+                                except: pass
+                            threading.Thread(target=play_task, daemon=True).start()
+                            
+                        incoming_file = None
+                    elif msg_type == "read_ack":
+                        self._mark_message_seen(content)
                     elif msg_type is None:
                         self.is_online = False
                         self.add_message("System", "Peer disconnected. Waiting for auto-reconnect...")
@@ -159,14 +214,49 @@ class ChatUI:
                         self.trust_callback()
                         input_field.text = ""
                         return True
+                
+                if text.lower() == "/voice":
+                    if self.voice_record_callback:
+                        self.voice_record_callback()
+                        input_field.text = ""
+                        return True
 
-                self.add_message("You", text)
-                self.send_callback(text)
+                if text.lower().startswith("/send "):
+                    path = text[6:].strip()
+                    self._start_file_send(path)
+                    input_field.text = ""
+                    return True
+
+                msg_id = self.send_callback(text)
+                self.add_message("You", text, msg_id=msg_id)
                 input_field.text = ""
                 self._last_typing_state = False # Reset typing state
                 if self.typing_callback:
                     self.typing_callback(False)
             return True
+
+    def _start_file_send(self, path):
+        import os
+        if not os.path.exists(path):
+            self.add_message("System", f"❌ File not found: {path}")
+            return
+
+        def send_task():
+            try:
+                filename = os.path.basename(path)
+                filesize = os.path.getsize(path)
+                self.add_message("System", f"📤 Sending file: {filename} ({filesize} bytes)...")
+                
+                # We need a reference to proto, but ui only has send_callback.
+                # I'll rely on the caller setting self.proto or similar.
+                # Actually, I'll pass a separate file_send_callback to start().
+                if self.file_send_callback:
+                    self.file_send_callback(path, filename, filesize)
+                    self.add_message("System", f"✅ Sent: {filename}")
+            except Exception as e:
+                self.add_message("System", f"❌ Send failed: {e}")
+
+        threading.Thread(target=send_task, daemon=True).start()
 
         input_field.accept_handler = accept_text
 

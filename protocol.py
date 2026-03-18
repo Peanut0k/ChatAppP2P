@@ -66,8 +66,12 @@ class ChatProtocol:
         self.trust_status = "trusted"
 
     def send_message(self, text):
-        """Encrypts and sends a message."""
-        self._send_raw(b'\x01' + text.encode('utf-8'))
+        """Encrypts and sends a message with a unique ID."""
+        import time
+        # Use simple timestamp-based ID
+        msg_id = str(int(time.time() * 1000))[-8:]
+        self._send_raw(b'\x01' + msg_id.encode('utf-8') + b':' + text.encode('utf-8'))
+        return msg_id
 
     def send_typing(self, is_typing):
         """Sends a typing notification."""
@@ -99,8 +103,27 @@ class ChatProtocol:
         payload = decrypted[1:]
         
         if msg_type == 1: # Text
-            return "text", payload.decode('utf-8')
+            parts = payload.split(b':', 1)
+            if len(parts) > 1:
+                return "text", (parts[0].decode('utf-8'), parts[1].decode('utf-8'))
+            return "text", (None, payload.decode('utf-8'))
         elif msg_type == 2: # Typing
             return "typing", payload == b'\x01'
+        elif msg_type == 6: # READ Ack
+            return "read_ack", payload.decode('utf-8')
         
         return "unknown", payload
+
+    def send_file_start(self, filename, size):
+        import json
+        meta = json.dumps({"name": filename, "size": size})
+        self._send_raw(b'\x03' + meta.encode('utf-8'))
+
+    def send_file_chunk(self, chunk):
+        self._send_raw(b'\x04' + chunk)
+
+    def send_file_end(self):
+        self._send_raw(b'\x05' + b'')
+
+    def send_read_ack(self, message_id):
+        self._send_raw(b'\x06' + message_id.encode('utf-8'))
