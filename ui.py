@@ -45,11 +45,18 @@ class ChatUI:
         self.typing_callback = None
         self._current_ansi = ANSI("")
         self._line_count = 0
+        self.scroll_index = 0
+        self.auto_scroll = True
         
-        # Use get_cursor_position to force the window to always be at the bottom
+        # Use get_cursor_position to handle vertical scrolling
+        def get_pos():
+            if self.auto_scroll:
+                return Point(x=0, y=max(0, self._line_count - 1))
+            return Point(x=0, y=self.scroll_index)
+
         self.history_control = FormattedTextControl(
             lambda: self._current_ansi,
-            get_cursor_position=lambda: Point(x=0, y=max(0, self._line_count - 1))
+            get_cursor_position=get_pos
         )
 
     def add_message(self, sender, text, is_seen=False, msg_id=None):
@@ -133,7 +140,7 @@ class ChatUI:
                     max_bw = min(width - 10, int(width * 0.7))
                     projected_width = len(text) + 4
                     p_width = max_bw if projected_width > max_bw else None
-                    p = Panel(Text(text), border_style="green", padding=(0, 1), title="[bold]Peer", title_align="left", width=p_width, expand=False)
+                    p = Panel(Text(text), border_style="green", padding=(0, 1), title="[bold]The Other Guy", title_align="left", width=p_width, expand=False)
                     console.print(Align.left(p, width=width))
                 else:
                     console.print(Align.center(Text(text, style="italic dim yellow")))
@@ -146,6 +153,12 @@ class ChatUI:
         raw_text = buf.getvalue()
         self._current_ansi = ANSI(raw_text)
         self._line_count = raw_text.count('\n') + 1
+        
+        if self.auto_scroll:
+            self.scroll_index = max(0, self._line_count - 1)
+        
+        if self.app:
+            self.app.invalidate()
 
     def start(self, send_callback, receive_callback, trust_callback=None, typing_callback=None, file_send_callback=None, ack_callback=None, voice_record_callback=None, resume_callback=None):
         self.send_callback = send_callback
@@ -416,6 +429,19 @@ class ChatUI:
                 self._handle_explorer_key("enter")
             else:
                 accept_text(event.current_buffer)
+
+        @kb.add("pageup")
+        def _(event):
+            self.auto_scroll = False
+            self.scroll_index = max(0, self.scroll_index - 10)
+            if self.app: self.app.invalidate()
+
+        @kb.add("pagedown")
+        def _(event):
+            self.scroll_index = min(self._line_count - 1, self.scroll_index + 10)
+            if self.scroll_index >= self._line_count - 1:
+                self.auto_scroll = True
+            if self.app: self.app.invalidate()
 
         @kb.add("escape")
         def _(event):
