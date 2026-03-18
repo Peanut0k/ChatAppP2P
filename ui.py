@@ -14,6 +14,8 @@ from prompt_toolkit.data_structures import Point
 import threading
 import queue
 import io
+import time
+import os
 
 class ChatUI:
     def __init__(self, role, peer_mac, safety_number, trust_status="new"):
