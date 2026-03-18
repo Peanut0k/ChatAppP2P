@@ -97,18 +97,41 @@ def main():
                     ui.add_message("System", "Peer marked as TRUSTED.")
 
                 def handle_file_send(path, filename, size):
-                    chunk_size = 16 * 1024 # 16KB chunks (Optimized for Bluetooth stability)
-                    proto.send_file_start(filename, size)
+                    # 1. Calculate Hash (Security)
+                    ui.add_message("System", f"🛡️ Calculating security fingerprint for {filename}...")
+                    import hashlib
+                    sha = hashlib.sha256()
+                    with open(path, "rb") as f:
+                        while chunk := f.read(65536): sha.update(chunk)
+                    f_hash = sha.hexdigest()
+
+                    # 2. Start Handshake
+                    proto.send_file_start(filename, size, f_hash)
+                    progress_id = ui.add_message("System", f"📤 Negotiating connection for {filename}...")
+                    
+                    # 3. Wait for Resume Offset (Synchronous Handshake)
+                    start_wait = time.time()
+                    ui.requested_resume_offset = -1 # Special signal
+                    while ui.requested_resume_offset == -1 and time.time() - start_wait < 5:
+                        time.sleep(0.1)
+                    
+                    off = ui.requested_resume_offset if ui.requested_resume_offset >= 0 else 0
+                    ui.requested_resume_offset = 0 # reset
                     
                     from transport import format_size
                     tot_str = format_size(size)
-                    progress_id = ui.add_message("System", f"📤 Sending: {filename} (0B / {tot_str}, 0%)")
-                    sent_bytes = 0
+                    sent_bytes = off
                     last_upd = 0
                     
                     with open(path, "rb") as f:
+                        if off > 0:
+                            f.seek(off)
+                            ui.update_message(progress_id, f"📤 Resuming: {filename} ({format_size(off)} / {tot_str})")
+                        else:
+                            ui.update_message(progress_id, f"📤 Sending: {filename} (0B / {tot_str})")
+
                         while True:
-                            chunk = f.read(chunk_size)
+                            chunk = f.read(16 * 1024)
                             if not chunk:
                                 break
                             proto.send_file_chunk(chunk)
@@ -122,7 +145,6 @@ def main():
                                     ui.update_message(progress_id, f"📤 Sending: {filename} ({cur_str} / {tot_str}, {pct}%)")
                     
                     proto.send_file_end()
-                    ui.update_message(progress_id, f"✅ Sent: {filename} ({tot_str}, 100%)")
 
                 voice_ctx = {"proc": None, "path": None}
 
@@ -194,7 +216,8 @@ def main():
                     typing_callback=lambda is_typing: proto.send_typing(is_typing),
                     file_send_callback=handle_file_send,
                     ack_callback=lambda mid: proto.send_read_ack(mid),
-                    voice_record_callback=handle_voice_record
+                    voice_record_callback=handle_voice_record,
+                    resume_callback=lambda off: proto.send_file_resume(off)
                 )
                 
                 # If UI exits normally (via /quit), break out of loop

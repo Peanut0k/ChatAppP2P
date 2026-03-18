@@ -34,10 +34,12 @@ class ChatUI:
         self.messages = []
         self.recv_progress_id = None
         self.total_received = 0
+        self.requested_resume_offset = 0
         self.last_update_time = 0
         self._stop_event = threading.Event()
         self.app = None
         self.send_callback = None
+        self.resume_callback = None
         self.trust_callback = None
         self.typing_callback = None
         self._current_ansi = ANSI("")
@@ -184,11 +186,22 @@ class ChatUI:
                         save_dir = Path.home() / "Downloads" / "ChatApp"
                         save_dir.mkdir(parents=True, exist_ok=True)
                         save_path = save_dir / file_meta["name"]
-                        incoming_file = open(save_path, "wb")
-                        self.total_received = 0
+                        
+                        # Resumption check
+                        offset = 0
+                        mode = "wb"
+                        if save_path.exists():
+                            curr_size = save_path.stat().st_size
+                            if curr_size < file_meta["size"]:
+                                offset = curr_size
+                                mode = "ab" # Append
+                                if self.resume_callback: self.resume_callback(offset)
+                        
+                        incoming_file = open(save_path, mode)
+                        self.total_received = offset
                         from transport import format_size
                         fsize_str = format_size(file_meta['size'])
-                        self.recv_progress_id = self.add_message("System", f"📥 Receiving: {file_meta['name']} (0B / {fsize_str}, 0%)")
+                        self.recv_progress_id = self.add_message("System", f"📥 Receiving: {file_meta['name']} ({format_size(offset)} / {fsize_str})")
                     elif msg_type == "file_chunk" and incoming_file:
                         incoming_file.write(content)
                         self.total_received += len(content)
@@ -206,15 +219,28 @@ class ChatUI:
                         incoming_file.close()
                         from transport import format_size
                         tot_str = format_size(file_meta['size'])
-                        self.update_message(self.recv_progress_id, f"✅ Received: {file_meta['name']} ({tot_str}, 100%)")
+                        self.update_message(self.recv_progress_id, f"💾 Verifying: {file_meta['name']}...")
                         
-                        if file_meta['name'].startswith("voice_") and file_meta['name'].endswith(".wav"):
-                            self.voice_pending_path = save_path
-                            self.add_message("System", f"🎙️ Voice clip received! Play now? [Enter] Yes | [Esc] No")
-                            if self.app:
-                                if os.environ.get("TERMUX_VERSION"):
-                                    self.app.renderer.clear() # Hard reset for Termux
-                                self.app.invalidate()
+                        # Verify SHA-256
+                        def verify_task(path, expected_hash, progress_id, name):
+                            import hashlib
+                            sha = hashlib.sha256()
+                            with open(path, "rb") as f:
+                                while chunk := f.read(65536): sha.update(chunk)
+                            
+                            if sha.hexdigest() == expected_hash:
+                                self.update_message(progress_id, f"✅ Verified: {name} ({tot_str}, Secure)")
+                            else:
+                                if path.exists(): path.unlink()
+                                self.update_message(progress_id, f"❌ CORRUPTED: {name} (Deleted for protection)")
+                            
+                            # Existing voice logic
+                            if name.startswith("voice_") and name.endswith(".wav") and sha.hexdigest() == expected_hash:
+                                self.voice_pending_path = path
+                                self.add_message("System", f"🎙️ Voice clip ready! [Enter] Play | [Esc] Dismiss")
+                                if self.app: self.app.invalidate()
+
+                        threading.Thread(target=verify_task, args=(save_path, file_meta["sha256"], self.recv_progress_id, file_meta["name"]), daemon=True).start()
                         incoming_file = None
                     elif msg_type == "read_ack":
                         self._mark_message_seen(content)

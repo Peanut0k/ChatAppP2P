@@ -118,12 +118,14 @@ class ChatProtocol:
             return "file_end", None
         elif msg_type == 6: # READ Ack
             return "read_ack", payload.decode('utf-8')
+        elif msg_type == 7: # FILE Resume Request
+            return "file_resume", struct.unpack(">Q", payload)[0]
         
         return "unknown", payload
 
-    def send_file_start(self, filename, size):
+    def send_file_start(self, filename, size, file_hash):
         import json
-        meta = json.dumps({"name": filename, "size": size})
+        meta = json.dumps({"name": filename, "size": size, "sha256": file_hash})
         self._send_raw(b'\x03' + meta.encode('utf-8'))
 
     def send_file_chunk(self, chunk):
@@ -134,3 +136,6 @@ class ChatProtocol:
 
     def send_read_ack(self, message_id):
         self._send_raw(b'\x06' + message_id.encode('utf-8'))
+
+    def send_file_resume(self, offset):
+        self._send_raw(b'\x07' + struct.pack(">Q", offset))
