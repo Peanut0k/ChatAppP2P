@@ -22,7 +22,7 @@ source "$VENV_DIR/bin/activate"
 
 # 3. Install Dependencies
 echo "📦 Checking dependencies..."
-pip install -q cryptography rich
+pip install -q -r requirements.txt
 
 # 4. Handle Arguments
 case "$1" in
