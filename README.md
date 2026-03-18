@@ -37,11 +37,18 @@ Clone and run the launcher for your OS:
 
 ## 💬 In-Chat Commands
 
-- `/send <path>`: Send a file (e.g., `/send ~/myphoto.jpg`).
-- `/voice`: Record 5 seconds of audio and send it (auto-plays on receiver).
-- `/trust`: Mark a new peer's identity as trusted permanently.
-- `/quit`: Exit the app safely.
-- `/help`: Show this command list.
+- `/send`: Open the **Built-in File Explorer** to browse and select files.
+- `/send <path>`: Send a specific file by its full path.
+- `/voice`: Toggle Walkie-Talkie recording (Press **Enter** to stop instantly).
+- `/trust`: Mark current peer as trusted.
+- `/quit`: Exit the app.
+- `/help`: Show all commands.
+
+### 📁 Using the File Explorer
+1. Type `/send` and press **Enter**.
+2. **↑ / ↓ Arrows**: Move the selection pointer.
+3. **[Enter]**: Enter a folder or select a file to send.
+4. **[Esc]**: Close the explorer and return to chat.
 
 ---
 

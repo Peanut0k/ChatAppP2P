@@ -398,6 +398,8 @@ class ChatUI:
         
         self._update_history()
         if self.app: self.app.invalidate()
+
+    def _start_file_send(self, path):
         import os, threading
         if not os.path.exists(path):
             self.add_message("System", f"❌ File not found: {path}")
