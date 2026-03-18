@@ -124,7 +124,7 @@ def main():
                     
                     # Wait for receiver to signal offset (up to 10s)
                     if not ui.resume_event.wait(10.0):
-                        ui.add_message("System", f"⚠️ Handshake timeout for {filename}. Defaulting to start.")
+                        ui.add_message("System", f"ℹ️ Handshake delayed for {filename}. Starting transfer...")
                     
                     off = ui.requested_resume_offset if ui.requested_resume_offset >= 0 else 0
                     ui.resume_event.clear()
