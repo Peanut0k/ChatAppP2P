@@ -30,6 +30,8 @@ class ChatUI:
         self.explorer_items = []
         self.voice_pending_path = None
         self.messages = []
+        self.recv_progress_id = None
+        self.total_received = 0
         self._stop_event = threading.Event()
         self.app = None
         self.send_callback = None
@@ -44,11 +46,26 @@ class ChatUI:
             get_cursor_position=lambda: Point(x=0, y=max(0, self._line_count - 1))
         )
 
-    def add_message(self, sender, text, msg_id=None, is_seen=False):
-        self.messages.append({"sender": sender, "text": text, "id": msg_id, "seen": is_seen})
+    def add_message(self, sender, text, is_seen=False, msg_id=None):
+        mid = msg_id or str(int(time.time() * 1000000))
+        self.messages.append({
+            "id": mid,
+            "sender": sender,
+            "text": text,
+            "seen": is_seen
+        })
         self._update_history()
-        if self.app:
-            self.app.invalidate()
+        if self.app: self.app.invalidate()
+        return mid
+
+    def update_message(self, msg_id, text):
+        for msg in self.messages:
+            if msg["id"] == msg_id:
+                msg["text"] = text
+                self._update_history()
+                if self.app: self.app.invalidate()
+                return True
+        return False
 
     def _mark_message_seen(self, msg_id):
         updated = False
@@ -165,12 +182,18 @@ class ChatUI:
                         save_dir.mkdir(parents=True, exist_ok=True)
                         save_path = save_dir / file_meta["name"]
                         incoming_file = open(save_path, "wb")
-                        self.add_message("System", f"📥 Receiving file: {file_meta['name']} ({file_meta['size']} bytes)...")
+                        self.total_received = 0
+                        self.recv_progress_id = self.add_message("System", f"📥 Receiving: {file_meta['name']} (0%)")
                     elif msg_type == "file_chunk" and incoming_file:
                         incoming_file.write(content)
+                        self.total_received += len(content)
+                        if file_meta['size'] > 0:
+                            pct = int((self.total_received / file_meta['size']) * 100)
+                            if pct % 5 == 0: # Update every 10%
+                                self.update_message(self.recv_progress_id, f"📥 Receiving: {file_meta['name']} ({pct}%)")
                     elif msg_type == "file_end" and incoming_file:
                         incoming_file.close()
-                        self.add_message("System", f"✅ File received: {file_meta['name']}")
+                        self.update_message(self.recv_progress_id, f"✅ Received: {file_meta['name']} (100%)")
                         
                         if file_meta['name'].startswith("voice_") and file_meta['name'].endswith(".wav"):
                             self.voice_pending_path = save_path

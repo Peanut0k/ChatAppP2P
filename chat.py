@@ -99,13 +99,24 @@ def main():
                 def handle_file_send(path, filename, size):
                     chunk_size = 16 * 1024 # 16KB chunks (Optimized for Bluetooth stability)
                     proto.send_file_start(filename, size)
+                    
+                    progress_id = ui.add_message("System", f"📤 Sending: {filename} (0%)")
+                    sent_bytes = 0
+                    
                     with open(path, "rb") as f:
                         while True:
                             chunk = f.read(chunk_size)
                             if not chunk:
                                 break
                             proto.send_file_chunk(chunk)
+                            sent_bytes += len(chunk)
+                            if size > 0:
+                                pct = int((sent_bytes / size) * 100)
+                                if pct % 5 == 0: # Update every 5%
+                                    ui.update_message(progress_id, f"📤 Sending: {filename} ({pct}%)")
+                    
                     proto.send_file_end()
+                    ui.update_message(progress_id, f"✅ Sent: {filename} (100%)")
 
                 voice_ctx = {"proc": None, "path": None}
 
