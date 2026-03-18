@@ -4,50 +4,50 @@ A secure, peer-to-peer chat application that works without WiFi or Internet.
 
 ## Features
 - **Zero Network Dependency**: Uses Bluetooth RFCOMM (no router/wifi needed).
-- **End-to-End Encryption**: X25519 ECDH for key exchange and ChaCha20-Poly1305 for messaging.
-- **Forward Secrecy**: New session keys are generated for every connection.
-- **MITM Protection**: 6-word "Safety Number" for verbal verification.
-- **Beautiful UI**: Rich terminal interface with message history.
+- **Cross-Platform**: Works on **Windows 11**, **Android (Termux)**, **Debian**, Arch, and Ubuntu.
+- **Easy Launch**: Simple `python3 run.py` handles everything.
+- **Auto-Discovery**: Scans for nearby peers automatically (supports `bluetoothctl`, `termux-api`, and PowerShell).
+- **TCP Fallback**: Works over Bluetooth Tethering or WiFi if native sockets are restricted (common on Android).
 
 ## Setup
 
 1. **Prerequisites**:
-   - Linux (Arch, Ubuntu, Fedora, etc.)
-   - Bluetooth adapter (Internal or USB dongle)
-   - Python 3.11+
+   - **Linux**: `bluez` installed.
+   - **Windows**: Windows 11 with Bluetooth enabled.
+   - **Android**: Install [Termux](https://termux.dev/) and the [Termux:API](https://play.google.com/store/apps/details?id=com.termux.api) app.
+   - **Python**: 3.11+
 
 2. **Installation**:
    ```bash
-   python3 -m venv .venv
-   source .venv/bin/activate
-   pip install cryptography rich
+   # Clone the repo and enter the directory
+   # Then just run the universal launcher:
+   python3 run.py
    ```
+   The launcher will automatically install missing Python libraries (`cryptography`, `rich`, `prompt_toolkit`).
 
 ## How to Chat
 
-### Step 1: Find your MAC Address
-Run this on the computer that will be the **Server**:
+### Step 1: Start the Server (Computer A)
 ```bash
-hciconfig
+python3 run.py server
 ```
-Look for `BD Address: AA:BB:CC:DD:EE:FF`. This is your Bluetooth MAC.
+*Note: On Android, if Bluetooth fails, it will automatically fallback to TCP mode.*
 
-### Step 2: Start the Server (Computer A)
+### Step 2: Start the Client (Computer B)
+Scan for the server:
 ```bash
-python3 chat.py server
-```
-
-### Step 3: Start the Client (Computer B)
-Replace `AA:BB:CC:DD:EE:FF` with the server's MAC address:
-```bash
-python3 chat.py client AA:BB:CC:DD:EE:FF
+python3 run.py client
 ```
 
-### Step 4: Verify Safety Number
-Once connected, both screens will show a **6-word safety number**. 
-Read these aloud to your friend. If they match, your connection is secure and cannot be intercepted (not even by the CIA).
+### 📱 Android (No-Root) Tips
+Android restricts direct Bluetooth access for non-root apps. If native Bluetooth fails:
+1. Enable **Bluetooth Tethering** in Android Settings on the Server device.
+2. Connect the Client device to the Server's Bluetooth network.
+3. Start the server with `python3 run.py --tcp server`.
+4. Start the client with `python3 run.py --tcp client [Server_IP]`.
+
+---
 
 ## Troubleshooting
-- **Permission Denied**: Make sure you are in the `bluetooth` group or run with `sudo`.
-- **Soft Blocked**: The app tries to unblock via `rfkill`, but you can also run `sudo rfkill unblock bluetooth` manually.
-- **Connection Refused**: Ensure the server is running and the Bluetooth adapter is powered on (`bluetoothctl power on`).
+- **Termux**: Run `pkg install termux-api` if scanning doesn't work.
+- **Windows**: Ensure Bluetooth is "Discoverable" in Windows Settings.

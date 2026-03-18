@@ -16,14 +16,19 @@ import queue
 import io
 
 class ChatUI:
-    def __init__(self, role, peer_mac, safety_number):
+    def __init__(self, role, peer_mac, safety_number, trust_status="new"):
         self.role = role
         self.peer_mac = peer_mac
         self.safety_number = safety_number
+        self.trust_status = trust_status 
+        self.peer_typing = False
+        self.is_online = True
         self.messages = []
         self._stop_event = threading.Event()
         self.app = None
         self.send_callback = None
+        self.trust_callback = None
+        self.typing_callback = None
         self._current_ansi = ANSI("")
         self._line_count = 0
         
@@ -42,45 +47,75 @@ class ChatUI:
     def _update_history(self):
         """Builds the full chat history in Rich and converts to ANSI."""
         buf = io.StringIO()
-        # Use a fixed width
-        console = Console(file=buf, force_terminal=True, width=78, color_system="truecolor")
+        # Use terminal width (fallback to 80)
+        from shutil import get_terminal_size
+        width = get_terminal_size((80, 24)).columns
+        
+        console = Console(file=buf, force_terminal=True, width=width, color_system="truecolor")
         
         # Header - minimal
-        console.print(Text(f"🔒 {self.role} • {self.peer_mac}", style="bold cyan dim"))
-        console.print(" " * 78) # Spacer
+        trust_icon = "🟢" if self.trust_status == "trusted" else ("🟡" if self.trust_status == "new" else "🔴")
+        signal_icon = "📶" if self.is_online else "⚠️ [bold red]DISCONNECTED[/]"
+        typing_text = " [italic cyan]... is typing[/]" if self.peer_typing else ""
+        header_text = f"🔒 {self.role} • {self.peer_mac} • {trust_icon} {self.trust_status.upper()} • {signal_icon}{typing_text}"
+        
+        if self.trust_status == "untrusted":
+             header_text += " [bold blink red](!) WARNING: IDENTITY CHANGED"
+        
+        console.print(Text.from_markup(header_text, style="bold cyan dim"))
+        console.print(" " * width) # Spacer
         
         # Messages rendered as bubbles
         for sender, text in self.messages:
             if sender == "You":
-                p = Panel(Text(text), border_style="blue", padding=(0, 1), title="[bold]You", title_align="right")
-                console.print(Align.right(p, width=78))
+                # Max width for bubbles is 2/3 of terminal
+                bubble_width = min(width - 10, int(width * 0.7))
+                p = Panel(Text(text), border_style="blue", padding=(0, 1), title="[bold]You", title_align="right", width=bubble_width)
+                console.print(Align.right(p, width=width))
             elif sender == "Peer":
-                p = Panel(Text(text), border_style="green", padding=(0, 1), title="[bold]Peer", title_align="left")
-                console.print(Align.left(p, width=78))
+                bubble_width = min(width - 10, int(width * 0.7))
+                p = Panel(Text(text), border_style="green", padding=(0, 1), title="[bold]Peer", title_align="left", width=bubble_width)
+                console.print(Align.left(p, width=width))
             else:
                 console.print(Align.center(Text(text, style="italic dim yellow")))
             console.print(" ") # Space between bubbles
 
         # Safety number at bottom of history
-        console.print("-" * 78, style="dim")
+        console.print("-" * width, style="dim")
         console.print(Text(f"Safety: {self.safety_number}", style="italic dim yellow"))
         
         raw_text = buf.getvalue()
         self._current_ansi = ANSI(raw_text)
         self._line_count = raw_text.count('\n') + 1
 
-    def start(self, send_callback, receive_callback):
+    def start(self, send_callback, receive_callback, trust_callback=None, typing_callback=None):
         self.send_callback = send_callback
+        self.trust_callback = trust_callback
+        self.typing_callback = typing_callback
+        
+        if self.trust_status == "new":
+            self.add_message("System", "This is a new peer. Type /trust to mark as trusted.")
+        elif self.trust_status == "untrusted":
+             self.add_message("System", "(!) WARNING: Peer's identity has changed! Someone might be intercepting your connection.")
+
         self._update_history() # Initial render
 
         def recv_thread():
             while not self._stop_event.is_set():
                 try:
-                    msg = receive_callback()
-                    if msg:
-                        self.add_message("Peer", msg)
-                    else:
-                        self.add_message("System", "Peer disconnected.")
+                    msg_type, content = receive_callback()
+                    if msg_type == "text":
+                        self.peer_typing = False
+                        self.add_message("Peer", content)
+                    elif msg_type == "typing":
+                        self.peer_typing = content
+                        self._update_history()
+                        if self.app: self.app.invalidate()
+                    elif msg_type is None:
+                        self.is_online = False
+                        self.add_message("System", "Peer disconnected. Waiting for auto-reconnect...")
+                        self._update_history()
+                        if self.app: self.app.invalidate()
                         self._stop_event.set()
                         if self.app: self.app.exit()
                         break
@@ -100,6 +135,17 @@ class ChatUI:
             style="class:input-field",
         )
 
+        # Typing notification logic
+        self._last_typing_state = False
+        def on_text_changed(_):
+            is_typing = len(input_field.text.strip()) > 0
+            if is_typing != self._last_typing_state:
+                self._last_typing_state = is_typing
+                if self.typing_callback:
+                    self.typing_callback(is_typing)
+
+        input_field.buffer.on_text_changed += on_text_changed
+
         def accept_text(buffer):
             text = input_field.text.strip()
             if text:
@@ -108,9 +154,18 @@ class ChatUI:
                     self.app.exit()
                     return True
                 
+                if text.lower() == "/trust":
+                    if self.trust_callback:
+                        self.trust_callback()
+                        input_field.text = ""
+                        return True
+
                 self.add_message("You", text)
                 self.send_callback(text)
                 input_field.text = ""
+                self._last_typing_state = False # Reset typing state
+                if self.typing_callback:
+                    self.typing_callback(False)
             return True
 
         input_field.accept_handler = accept_text
