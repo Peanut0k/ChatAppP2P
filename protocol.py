@@ -109,6 +109,13 @@ class ChatProtocol:
             return "text", (None, payload.decode('utf-8'))
         elif msg_type == 2: # Typing
             return "typing", payload == b'\x01'
+        elif msg_type == 3: # FILE Metadata
+            import json
+            return "file_start", json.loads(payload.decode('utf-8'))
+        elif msg_type == 4: # FILE Chunk
+            return "file_chunk", payload
+        elif msg_type == 5: # FILE End
+            return "file_end", None
         elif msg_type == 6: # READ Ack
             return "read_ack", payload.decode('utf-8')
         

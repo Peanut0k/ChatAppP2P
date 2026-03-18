@@ -1,72 +1,66 @@
-# 🔒 Offline Encrypted Bluetooth Chat
+# 🔒 Offline Encrypted P2P Chat (v3.0)
 
-A secure, peer-to-peer chat application that works without WiFi or Internet.
+A secure, "flawless" peer-to-peer chat application that works without WiFi or Internet.
 
-## Features
-- **Zero Network Dependency**: Uses Bluetooth RFCOMM (no router/wifi needed).
-- **Cross-Platform**: Works on **Windows 11**, **Android (Termux)**, **Debian**, Arch, and Ubuntu.
-- **Easy Launch**: Simple `python3 run.py` handles everything.
-- **Auto-Discovery**: Scans for nearby peers automatically (supports `bluetoothctl`, `termux-api`, and PowerShell).
-- **TCP Fallback**: Works over Bluetooth Tethering or WiFi if native sockets are restricted (common on Android).
+## ✨ New in Version 3.0
+- **📂 File Transfer**: Send any file encrypted over the air (`/send <path>`).
+- **🎙️ Walkie-Talkie Mode**: Send 5-second encrypted voice memos (`/voice`).
+- **✓ Read Receipts**: Real-time status (✓) when your friend sees your message.
+- **🕸️ Mesh Relay**: Bridge connections between Bluetooth and TCP nodes (`--relay`).
+- **🛡️ Identity Trust**: Permanent device identities that stick across restarts.
 
 ## 🚀 Zero-Config Setup
 
-The ChatApp now handles all its own dependencies and environments. You don't need to manually create virtual environments or install Python packages.
+The ChatApp handles its own environments. **Just run and chat.**
 
 ### 1. Prerequisites
-- **Python**: 3.11 or higher installed on your system.
+- **Python**: 3.11+ installed.
 - **Bluetooth**: Hardware enabled and discoverable.
 
-### 2. Launch the App
-Clone the repository and run the launcher for your operating system:
+### 2. Launch
+Clone and run the launcher for your OS:
 
-*   **Linux / Android (Termux)**:
-    ```bash
-    ./run.sh server
-    ```
-*   **Windows**:
-    ```cmd
-    run.bat server
-    ```
-*   **Universal**:
-    ```bash
-    python3 run.py server
-    ```
-*The launcher will automatically create a virtual environment, install dependencies (including `pkg` dependencies on Termux), and start the app.*
+- **Linux / Android (Termux)**:
+  ```bash
+  ./run.sh server  # Run on Computer A
+  ./run.sh client  # Run on Computer B (scans automatically)
+  ```
+- **Windows**:
+  ```cmd
+  run.bat server
+  run.bat client
+  ```
+- **Bridge / Mesh Mode**:
+  ```bash
+  ./run.sh --relay
+  ```
 
 ---
 
-## 💬 How to Chat
+## 💬 In-Chat Commands
 
-### Step 1: Start the Server (Computer A)
-Run the launcher in `server` mode:
-```bash
-./run.sh server
-```
-
-### Step 2: Start the Client (Computer B)
-Run the launcher in `client` mode. If you don't provide a MAC address, it will automatically scan for nearby devices:
-```bash
-./run.sh client
-```
-*Or connect directly:*
-```bash
-./run.sh client AA:BB:CC:DD:EE:FF
-```
+- `/send <path>`: Send a file (e.g., `/send ~/myphoto.jpg`).
+- `/voice`: Record 5 seconds of audio and send it (auto-plays on receiver).
+- `/trust`: Mark a new peer's identity as trusted permanently.
+- `/quit`: Exit the app safely.
+- `/help`: Show this command list.
 
 ---
 
 ## 📱 Android (Termux) Support
-Android restricts direct Bluetooth access for non-root apps. If native Bluetooth fails:
-1. Enable **Bluetooth Tethering** in Android Settings on the Server device.
-2. Connect the Client device to the Server's Bluetooth network.
+Android restricts direct Bluetooth for non-root. If scanning fails:
+1. Enable **Bluetooth Tethering** on the Server.
+2. Connect the Client to the Server's Bluetooth network.
 3. Use the `--tcp` flag:
    - Server: `./run.sh --tcp server`
    - Client: `./run.sh --tcp client [Server_IP]`
 
+### Requirements for Android:
+Install the **Termux:API** app (Play Store/F-Droid) to enable Bluetooth scanning, microphone recording, and voice playback.
+
 ---
 
 ## 🛠️ Troubleshooting
-- **Linux**: Ensure your user is in the `bluetooth` group or use `sudo ./run.sh`.
-- **Windows**: Make sure Bluetooth is set to "Discoverable" in Windows settings.
-- **Termux**: If scanning fails, ensure you have the **Termux:API** app installed from the Play Store/F-Droid.
+- **Permission Denied**: On Linux, ensure you are in the `bluetooth` group or use `sudo ./run.sh`.
+- **Identity Warning**: If you see a **🔴 UNTRUSTED** warning, it means someone is intercepting your connection or your friend reinstalled their app. Check your safety numbers!
+- **Voice Fails**: On Linux, ensure `alsa-utils` is installed (for `arecord` and `aplay`).

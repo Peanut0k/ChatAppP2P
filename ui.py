@@ -187,7 +187,6 @@ class ChatUI:
             height=3,
             prompt="You: ",
             multiline=False,
-            style="class:input-field",
         )
 
         # Typing notification logic
@@ -235,29 +234,6 @@ class ChatUI:
                     self.typing_callback(False)
             return True
 
-    def _start_file_send(self, path):
-        import os
-        if not os.path.exists(path):
-            self.add_message("System", f"❌ File not found: {path}")
-            return
-
-        def send_task():
-            try:
-                filename = os.path.basename(path)
-                filesize = os.path.getsize(path)
-                self.add_message("System", f"📤 Sending file: {filename} ({filesize} bytes)...")
-                
-                # We need a reference to proto, but ui only has send_callback.
-                # I'll rely on the caller setting self.proto or similar.
-                # Actually, I'll pass a separate file_send_callback to start().
-                if self.file_send_callback:
-                    self.file_send_callback(path, filename, filesize)
-                    self.add_message("System", f"✅ Sent: {filename}")
-            except Exception as e:
-                self.add_message("System", f"❌ Send failed: {e}")
-
-        threading.Thread(target=send_task, daemon=True).start()
-
         input_field.accept_handler = accept_text
 
         # Layout
@@ -294,7 +270,27 @@ class ChatUI:
         try:
             self.app.run()
         finally:
-            print("Conversation ended.")
+            self._stop_event.set()
+
+    def _start_file_send(self, path):
+        import os, threading
+        if not os.path.exists(path):
+            self.add_message("System", f"❌ File not found: {path}")
+            return
+
+        def send_task():
+            try:
+                filename = os.path.basename(path)
+                filesize = os.path.getsize(path)
+                self.add_message("System", f"📤 Sending file: {filename} ({filesize} bytes)...")
+                
+                if self.file_send_callback:
+                    self.file_send_callback(path, filename, filesize)
+                    self.add_message("System", f"✅ Sent: {filename}")
+            except Exception as e:
+                self.add_message("System", f"❌ Send failed: {e}")
+
+        threading.Thread(target=send_task, daemon=True).start()
 
 if __name__ == "__main__":
     ui = ChatUI("Server", "AA:BB:CC:DD:EE:FF", "apple-beach-cloud-dance-eagle-flame")
