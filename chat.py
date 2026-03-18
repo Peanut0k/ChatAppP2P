@@ -97,7 +97,7 @@ def main():
                     ui.add_message("System", "Peer marked as TRUSTED.")
 
                 def handle_file_send(path, filename, size):
-                    chunk_size = 32 * 1024 # 32KB chunks
+                    chunk_size = 16 * 1024 # 16KB chunks (Optimized for Bluetooth stability)
                     proto.send_file_start(filename, size)
                     with open(path, "rb") as f:
                         while True:
