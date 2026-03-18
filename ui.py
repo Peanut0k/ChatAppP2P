@@ -4,10 +4,11 @@ from rich.panel import Panel
 from rich.text import Text
 from prompt_toolkit.application import Application
 from prompt_toolkit.layout.containers import HSplit, Window, VSplit
-from prompt_toolkit.layout.controls import FormattedTextControl
+from prompt_toolkit.layout.controls import FormattedTextControl, BufferControl
 from prompt_toolkit.layout.layout import Layout
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.widgets import TextArea
+from prompt_toolkit.buffer import Buffer
 from prompt_toolkit.formatted_text import ANSI
 import threading
 import queue
@@ -23,42 +24,52 @@ class ChatUI:
         self._stop_event = threading.Event()
         self.app = None
         self.send_callback = None
+        
+        # Buffer for message display
+        self.history_area = TextArea(
+            read_only=True,
+            scrollbar=True,
+            wrap_lines=True,
+            style="class:history-area",
+        )
 
     def add_message(self, sender, text):
         self.messages.append((sender, text))
+        self._update_history()
         if self.app:
-            self.app.invalidate() # Trigger UI redraw
+            self.app.invalidate()
 
-    def _render_messages(self):
-        """Renders the message history using Rich but converts to ANSI for prompt_toolkit."""
-        # Create a fresh buffer
+    def _update_history(self):
+        """Builds the full chat history in Rich and converts to ANSI for the TextArea."""
         buf = io.StringIO()
-        console = Console(file=buf, force_terminal=True, width=self.console.width)
+        console = Console(file=buf, force_terminal=True, width=78) # Slightly narrower for scrollbar
         
         # Header
-        header = Text(f"🔒 Offline Encrypted | Role: {self.role} | Peer: {self.peer_mac}", style="bold cyan")
-        console.print(Panel(header, border_style="blue"))
+        console.print(Panel(Text(f"🔒 Encrypted | {self.role} | Peer: {self.peer_mac}", style="bold cyan"), border_style="blue"))
         
         # Messages
         table = Table(show_header=False, box=None, expand=True)
         table.add_column("S", style="bold green", width=10)
         table.add_column("M")
         
-        for sender, text in self.messages[-20:]: # Last 20 messages
+        for sender, text in self.messages:
             table.add_row(sender, text)
         
         console.print(table)
         
         # Safety Number
-        footer = Text(f"Safety Number: {self.safety_number}", style="bold yellow")
-        console.print(Panel(footer, border_style="yellow"))
+        console.print(Panel(Text(f"Safety Number: {self.safety_number}", style="bold yellow"), border_style="yellow"))
         
-        return ANSI(buf.getvalue())
+        # Update text area and scroll to bottom
+        output = buf.getvalue()
+        self.history_area.text = output
+        # Scroll to the end
+        self.history_area.buffer.cursor_position = len(self.history_area.text)
 
     def start(self, send_callback, receive_callback):
         self.send_callback = send_callback
+        self._update_history() # Initial render
 
-        # Message receiver thread
         def recv_thread():
             while not self._stop_event.is_set():
                 try:
@@ -82,9 +93,8 @@ class ChatUI:
         input_field = TextArea(
             height=3,
             prompt="You: ",
-            style="class:input-field",
             multiline=False,
-            wrap_lines=False,
+            style="class:input-field",
         )
 
         def accept_text(buffer):
@@ -103,9 +113,8 @@ class ChatUI:
         input_field.accept_handler = accept_text
 
         # Layout
-        body = Window(content=FormattedTextControl(self._render_messages))
         root_container = HSplit([
-            body,
+            self.history_area,
             Window(height=1, char="-", style="class:line"),
             input_field,
         ])
@@ -117,13 +126,16 @@ class ChatUI:
             self._stop_event.set()
             event.app.exit()
 
+        @kb.add("pageup")
+        def _(event):
+            self.history_area.buffer.cursor_position = 0 # Not ideal but simple
+
         # Application
         self.app = Application(
             layout=Layout(root_container, focused_element=input_field),
             key_bindings=kb,
             full_screen=True,
             mouse_support=True,
-            refresh_interval=0.5, # Autorefresh even without input
         )
 
         try:
