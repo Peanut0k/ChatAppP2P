@@ -18,19 +18,21 @@ def check_dependencies(is_termux):
     if missing:
         print(f"Missing libraries: {', '.join(missing)}")
         if is_termux and "cryptography" in missing:
-            print("\n[!] CRITICAL (TERMUX): cryptography often fails via pip.")
+            print("\n[!] TERMUX ERROR: cryptography must be installed via 'pkg'.")
             print("Please run: pkg install python-cryptography")
-            print("Then run this script again.\n")
+            print("Then run this launcher again.\n")
             sys.exit(1)
             
         print("Attempting to install via pip...")
         try:
+            # For Termux, rich and prompt_toolkit work fine via pip
             subprocess.check_call([sys.executable, "-m", "pip", "install"] + missing)
             print("Successfully installed dependencies.")
         except Exception as e:
             print(f"\nError installing dependencies: {e}")
             if is_termux:
-                print("Suggestion: pkg install python-cryptography python-rich python-prompt-toolkit")
+                print("Tip: If pip fails, try 'pkg update' then 'pkg install python-cryptography'.")
+                print("For other libraries: pip install rich prompt_toolkit")
             else:
                 print("Please run: pip install " + " ".join(required))
             sys.exit(1)

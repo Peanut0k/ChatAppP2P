@@ -20,7 +20,7 @@ A secure, peer-to-peer chat application that works without WiFi or Internet.
      - **Important**: Run these commands in Termux FIRST:
        ```bash
        pkg update
-       pkg install python-cryptography python-rich python-prompt-toolkit termux-api
+       pkg install python-cryptography termux-api
        ```
    - **Python**: 3.11+
 
