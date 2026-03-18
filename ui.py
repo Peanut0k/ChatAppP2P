@@ -173,9 +173,11 @@ class ChatUI:
                                 try:
                                     save_path = Path.home() / "Downloads" / "ChatApp" / file_meta['name']
                                     if os.environ.get("TERMUX_VERSION"):
-                                        subprocess.run(["termux-media-player", "play", str(save_path)], check=True)
+                                        subprocess.run(["termux-media-player", "play", str(save_path)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                                     elif platform.system() == "Linux":
-                                        subprocess.run(["aplay", str(save_path)], check=True)
+                                        subprocess.run(["aplay", str(save_path)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                    # Force full redraw to fix terminal corruption
+                                    if self.app: self.app.renderer.clear()
                                 except: pass
                             threading.Thread(target=play_task, daemon=True).start()
                             

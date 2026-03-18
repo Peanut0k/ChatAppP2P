@@ -131,11 +131,14 @@ def main():
                         if voice_ctx["proc"] or os.environ.get("TERMUX_VERSION"):
                             try:
                                 if os.environ.get("TERMUX_VERSION"):
-                                    subprocess.run(["termux-microphone-record", "-q"], check=True)
+                                    subprocess.run(["termux-microphone-record", "-q"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                                     time.sleep(0.5) # Allow header to finalize
                                 else:
                                     os.killpg(os.getpgid(voice_ctx["proc"].pid), signal.SIGINT)
                                     voice_ctx["proc"].wait(timeout=2)
+                                
+                                # Force redraw to fix UI corruption
+                                if ui.app: ui.app.renderer.clear()
                                 
                                 ui.add_message("System", "✅ Recording finished!")
                                 
