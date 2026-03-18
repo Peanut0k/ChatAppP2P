@@ -47,6 +47,7 @@ class ChatUI:
         self._line_count = 0
         self.scroll_index = 0
         self.auto_scroll = True
+        self.header_ansi = ANSI("")
         
         # Use get_cursor_position to handle vertical scrolling
         def get_pos():
@@ -90,28 +91,32 @@ class ChatUI:
             self._update_history()
             if self.app: self.app.invalidate()
 
-    def _update_history(self):
-        """Builds the full chat history in Rich and converts to ANSI."""
-        buf = io.StringIO()
-        # Use terminal width (fallback to 80)
+    def _update_header(self):
+        """Updates the fixed top status bar."""
         from shutil import get_terminal_size
         width = get_terminal_size((80, 24)).columns
-        
+        buf = io.StringIO()
         console = Console(file=buf, force_terminal=True, width=width, color_system="truecolor")
         
-        # Header - minimal
         trust_icon = "🟢" if self.trust_status == "trusted" else ("🟡" if self.trust_status == "new" else "🔴")
         signal_icon = "📶" if self.is_online else "⚠️ [bold red]DISCONNECTED[/]"
         typing_text = " [italic cyan]... is typing[/]" if self.peer_typing else ""
         header_text = f"🔒 {self.role} • {self.peer_mac} • {trust_icon} {self.trust_status.upper()} • {signal_icon}{typing_text}"
         if self.is_recording:
              header_text += " [bold blink red]● REC[/]"
-        
         if self.trust_status == "untrusted":
              header_text += " [bold blink red](!) WARNING: IDENTITY CHANGED"
         
         console.print(Text.from_markup(header_text, style="bold cyan dim"))
-        console.print(" " * width) # Spacer
+        self.header_ansi = ANSI(buf.getvalue())
+
+    def _update_history(self):
+        """Builds the full chat history in Rich and converts to ANSI."""
+        self._update_header()
+        buf = io.StringIO()
+        from shutil import get_terminal_size
+        width = get_terminal_size((80, 24)).columns
+        console = Console(file=buf, force_terminal=True, width=width, color_system="truecolor")
         
         # Messages or Explorer?
         if self.explorer_visible:
@@ -390,9 +395,14 @@ class ChatUI:
             legend_text = ANSI(" [dim]Legend: [Enter] Send/Stop | /send (Explorer) | /voice | /help[/]")
         
         root_container = HSplit([
-            # Empty Window here acts as a spacer that pushes history to the bottom
-            Window(), 
+            # Fixed Header
+            Window(height=1, content=FormattedTextControl(lambda: self.header_ansi)),
+            Window(height=1, char="━", style="bold cyan"),
+            
+            # Scrollable History
             self.history_window,
+            
+            # Bottom Controls
             Window(height=1, char="─", style="dim"),
             input_field,
             Window(height=1, content=FormattedTextControl(lambda: legend_text), style="dim cyan"),
@@ -431,12 +441,14 @@ class ChatUI:
                 accept_text(event.current_buffer)
 
         @kb.add("pageup")
+        @kb.add("escape", "up") # Alt+Up
         def _(event):
             self.auto_scroll = False
             self.scroll_index = max(0, self.scroll_index - 10)
             if self.app: self.app.invalidate()
 
         @kb.add("pagedown")
+        @kb.add("escape", "down") # Alt+Down
         def _(event):
             self.scroll_index = min(self._line_count - 1, self.scroll_index + 10)
             if self.scroll_index >= self._line_count - 1:
