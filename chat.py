@@ -140,11 +140,20 @@ def main():
                                 # Force redraw to fix UI corruption
                                 if ui.app: ui.app.invalidate()
                                 
-                                ui.add_message("System", "✅ Recording finished!")
+                                ui.add_message("System", "✅ Recording finished! (Sent and purged locally)")
                                 
                                 path = voice_ctx["path"]
                                 if path and path.exists():
                                     handle_file_send(str(path), path.name, path.stat().st_size)
+                                    
+                                    # Auto-delete from sender's end after a brief delay
+                                    def purge_task(p):
+                                        import time, os
+                                        try:
+                                            time.sleep(2) # Wait for protocol to read
+                                            if os.path.exists(p): os.remove(p)
+                                        except: pass
+                                    threading.Thread(target=purge_task, args=(str(path),), daemon=True).start()
                             except Exception as e:
                                 ui.add_message("System", f"❌ Error stopping recording: {e}")
                             finally:
