@@ -2,7 +2,7 @@ import crypto
 import trust
 import struct
 
-PROTOCOL_VERSION = 2
+PROTOCOL_VERSION = 3
 
 class ChatProtocol:
     def __init__(self, transport, peer_mac):

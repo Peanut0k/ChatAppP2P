@@ -39,13 +39,13 @@ class BluetoothTransport(Transport):
     def send_framed(self, data: bytes):
         with self._lock:
             length = len(data)
-            header = struct.pack(">I", length)
+            header = struct.pack(">Q", length) # 8-byte header for infinite size
             self.sock.sendall(header + data)
 
     def recv_framed(self) -> bytes:
-        header = self._recv_exact(4)
+        header = self._recv_exact(8) # Read 8-byte header
         if not header: return None
-        length = struct.unpack(">I", header)[0]
+        length = struct.unpack(">Q", header)[0]
         return self._recv_exact(length)
 
     def _recv_exact(self, n):
