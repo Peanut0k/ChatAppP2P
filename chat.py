@@ -117,8 +117,8 @@ def main():
                                  # Termux (Android)
                                  voice_ctx["proc"] = subprocess.Popen(["termux-microphone-record", "-f", str(out_path)], preexec_fn=os.setsid)
                             elif platform.system() == "Linux":
-                                 # Linux (ALSA)
-                                 voice_ctx["proc"] = subprocess.Popen(["arecord", "-f", "cd", str(out_path)], preexec_fn=os.setsid)
+                                 # Linux (ALSA) - Standardize to 16kHz Mono to avoid noise on Android/Arch
+                                 voice_ctx["proc"] = subprocess.Popen(["arecord", "-f", "S16_LE", "-r", "16000", "-c", "1", str(out_path)], preexec_fn=os.setsid)
                             else:
                                  ui.add_message("System", "⚠️ Voice recording not yet supported on this platform.")
                                  ui.is_recording = False
