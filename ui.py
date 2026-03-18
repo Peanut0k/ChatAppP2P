@@ -238,7 +238,7 @@ class ChatUI:
                             # Existing voice logic
                             if name.startswith("voice_") and name.endswith(".wav") and sha.hexdigest() == expected_hash:
                                 self.voice_pending_path = path
-                                self.add_message("System", f"🎙️ Voice clip ready! [Enter] Play | [Esc] Dismiss")
+                                self.update_message(progress_id, f"🎙️ SECURE VOICE: [Enter] Play | [Esc] Dismiss")
                                 if self.app: self.app.invalidate()
 
                         threading.Thread(target=verify_task, args=(save_path, file_meta["sha256"], self.recv_progress_id, file_meta["name"]), daemon=True).start()

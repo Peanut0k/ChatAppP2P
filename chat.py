@@ -21,6 +21,16 @@ except ImportError:
     import sys
     sys.exit(1)
 
+def cleanup_temp_files():
+    """Wipes any orphaned voice or partial files for privacy."""
+    try:
+        tmp_dir = Path.home() / "Downloads" / "ChatApp"
+        if tmp_dir.exists():
+            for p in tmp_dir.glob("voice_*.wav"):
+                try: p.unlink()
+                except: pass
+    except: pass
+
 def main():
     parser = argparse.ArgumentParser(description="Offline Encrypted Bluetooth Chat")
     parser.add_argument("--tcp", action="store_true", help="Use TCP fallback (for Android/WiFi)")
@@ -42,6 +52,7 @@ def main():
         parser.print_help()
         sys.exit(1)
         
+    cleanup_temp_files()
     try:
         while True: # Auto-Reconnect Loop
             try:
@@ -238,6 +249,7 @@ def main():
     except Exception as e:
         print(f"\n⚠️ App Stopped: {e}")
     finally:
+        cleanup_temp_files()
         if 'trans' in locals():
             trans.close()
 
