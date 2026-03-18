@@ -126,16 +126,20 @@ def main():
                         except Exception as e:
                             ui.add_message("System", f"❌ Recording failed to start: {e}")
                             ui.is_recording = False
-                    else:
                         # Stop recording
-                        if voice_ctx["proc"]:
+                        if voice_ctx["proc"] or os.environ.get("TERMUX_VERSION"):
                             try:
-                                os.killpg(os.getpgid(voice_ctx["proc"].pid), signal.SIGINT)
-                                voice_ctx["proc"].wait(timeout=2)
+                                if os.environ.get("TERMUX_VERSION"):
+                                    subprocess.run(["termux-microphone-record", "-q"], check=True)
+                                    time.sleep(0.5) # Allow header to finalize
+                                else:
+                                    os.killpg(os.getpgid(voice_ctx["proc"].pid), signal.SIGINT)
+                                    voice_ctx["proc"].wait(timeout=2)
+                                
                                 ui.add_message("System", "✅ Recording finished!")
                                 
                                 path = voice_ctx["path"]
-                                if path.exists():
+                                if path and path.exists():
                                     handle_file_send(str(path), path.name, path.stat().st_size)
                             except Exception as e:
                                 ui.add_message("System", f"❌ Error stopping recording: {e}")
