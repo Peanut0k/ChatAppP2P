@@ -2,6 +2,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 from rich.text import Text
+from rich.align import Align
 from prompt_toolkit.application import Application
 from prompt_toolkit.layout.containers import HSplit, Window, VSplit
 from prompt_toolkit.layout.controls import FormattedTextControl
@@ -32,28 +33,35 @@ class ChatUI:
         self._update_history()
         if self.app:
             self.app.invalidate()
+        # Scroll to bottom after adding
+        if hasattr(self, 'history_window'):
+            self.history_window.vertical_scroll = 999999
 
     def _update_history(self):
         """Builds the full chat history in Rich and converts to ANSI."""
         buf = io.StringIO()
-        # Use a fixed width slightly less than terminal width
+        # Use a fixed width
         console = Console(file=buf, force_terminal=True, width=78, color_system="truecolor")
         
-        # Header
-        console.print(Panel(Text(f"🔒 Encrypted | {self.role} | Peer: {self.peer_mac}", style="bold cyan"), border_style="blue"))
+        # Header - minimal
+        console.print(Text(f"🔒 {self.role} • {self.peer_mac}", style="bold cyan dim"))
+        console.print(" " * 78) # Spacer
         
-        # Messages
-        table = Table(show_header=False, box=None, expand=True)
-        table.add_column("S", style="bold green", width=10)
-        table.add_column("M", overflow="fold")
-        
+        # Messages rendered as bubbles
         for sender, text in self.messages:
-            table.add_row(sender, text)
-        
-        console.print(table)
-        
-        # Safety Number
-        console.print(Panel(Text(f"Safety Number: {self.safety_number}", style="bold yellow"), border_style="yellow"))
+            if sender == "You":
+                p = Panel(Text(text), border_style="blue", padding=(0, 1), title="[bold]You", title_align="right")
+                console.print(Align.right(p, width=78))
+            elif sender == "Peer":
+                p = Panel(Text(text), border_style="green", padding=(0, 1), title="[bold]Peer", title_align="left")
+                console.print(Align.left(p, width=78))
+            else:
+                console.print(Align.center(Text(text, style="italic dim yellow")))
+            console.print(" ") # Space between bubbles
+
+        # Safety number at bottom of history
+        console.print("-" * 78, style="dim")
+        console.print(Text(f"Safety: {self.safety_number}", style="italic dim yellow"))
         
         self._current_ansi = ANSI(buf.getvalue())
 
@@ -105,15 +113,15 @@ class ChatUI:
 
         # Layout
         # Use a Window around the FormattedTextControl for scrolling
-        history_window = Window(
+        self.history_window = Window(
             content=self.history_control,
             always_hide_cursor=True,
             wrap_lines=True,
         )
 
         root_container = HSplit([
-            history_window,
-            Window(height=1, char="-", style="class:line"),
+            self.history_window,
+            Window(height=1, char="─", style="dim"),
             input_field,
         ])
 
