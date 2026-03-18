@@ -2,8 +2,9 @@ import sys
 import subprocess
 import platform
 import os
+import shutil
 
-def check_dependencies():
+def check_dependencies(is_termux):
     print("Checking dependencies...")
     required = ["cryptography", "rich", "prompt_toolkit"]
     missing = []
@@ -16,37 +17,48 @@ def check_dependencies():
             
     if missing:
         print(f"Missing libraries: {', '.join(missing)}")
-        print("Installing now...")
+        if is_termux and "cryptography" in missing:
+            print("\n[!] CRITICAL (TERMUX): cryptography often fails via pip.")
+            print("Please run: pkg install python-cryptography")
+            print("Then run this script again.\n")
+            sys.exit(1)
+            
+        print("Attempting to install via pip...")
         try:
             subprocess.check_call([sys.executable, "-m", "pip", "install"] + missing)
             print("Successfully installed dependencies.")
         except Exception as e:
-            print(f"Error installing dependencies: {e}")
-            print("Please run: pip install " + " ".join(required))
+            print(f"\nError installing dependencies: {e}")
+            if is_termux:
+                print("Suggestion: pkg install python-cryptography python-rich python-prompt-toolkit")
+            else:
+                print("Please run: pip install " + " ".join(required))
             sys.exit(1)
 
 def detect_platform():
-    system = platform.system()
     # Check for Termux
-    if os.environ.get("TERMUX_VERSION"):
+    if os.environ.get("TERMUX_VERSION") or os.path.exists("/data/data/com.termux"):
         return "Android (Termux)"
-    return system
+    return platform.system()
 
 def check_system_tools(os_name):
     print(f"Detected Platform: {os_name}")
     if os_name == "Linux":
-        if subprocess.run(["which", "bluetoothctl"], capture_output=True).returncode != 0:
+        if not shutil.which("bluetoothctl"):
             print("Warning: 'bluetoothctl' not found. Please install 'bluez' for Bluetooth support.")
     elif os_name == "Android (Termux)":
-        if subprocess.run(["which", "termux-bluetooth-scan"], capture_output=True).returncode != 0:
-            print("Warning: 'termux-api' not found. Please run: pkg install termux-api")
+        if not shutil.which("termux-bluetooth-scan"):
+            print("Warning: 'termux-api' components not found.")
+            print("To enable scanning, please run: pkg install termux-api")
 
 def main():
     print("--- 🔒 ChatApp Launcher ---")
     
     os_name = detect_platform()
+    is_termux = os_name == "Android (Termux)"
+    
     check_system_tools(os_name)
-    check_dependencies()
+    check_dependencies(is_termux)
     
     print("\nStarting ChatApp...\n")
     

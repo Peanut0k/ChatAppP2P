@@ -14,7 +14,14 @@ A secure, peer-to-peer chat application that works without WiFi or Internet.
 1. **Prerequisites**:
    - **Linux**: `bluez` installed.
    - **Windows**: Windows 11 with Bluetooth enabled.
-   - **Android**: Install [Termux](https://termux.dev/) and the [Termux:API](https://play.google.com/store/apps/details?id=com.termux.api) app.
+   - **Android**: 
+     - Install [Termux](https://termux.dev/).
+     - Install [Termux:API](https://play.google.com/store/apps/details?id=com.termux.api) (for scanning).
+     - **Important**: Run these commands in Termux FIRST:
+       ```bash
+       pkg update
+       pkg install python-cryptography python-rich python-prompt-toolkit termux-api
+       ```
    - **Python**: 3.11+
 
 2. **Installation**:
@@ -23,7 +30,7 @@ A secure, peer-to-peer chat application that works without WiFi or Internet.
    # Then just run the universal launcher:
    python3 run.py
    ```
-   The launcher will automatically install missing Python libraries (`cryptography`, `rich`, `prompt_toolkit`).
+   The launcher will check dependencies and guide you through any missing steps.
 
 ## How to Chat
 
@@ -31,7 +38,7 @@ A secure, peer-to-peer chat application that works without WiFi or Internet.
 ```bash
 python3 run.py server
 ```
-*Note: On Android, if Bluetooth fails, it will automatically fallback to TCP mode.*
+*Note: On Android, the launcher will automatically suggest TCP mode if Bluetooth fails.*
 
 ### Step 2: Start the Client (Computer B)
 Scan for the server:
@@ -40,7 +47,7 @@ python3 run.py client
 ```
 
 ### 📱 Android (No-Root) Tips
-Android restricts direct Bluetooth access for non-root apps. If native Bluetooth fails:
+Android restricts direct Bluetooth access for non-root apps. If native Bluetooth fails (which it usually does on Termux):
 1. Enable **Bluetooth Tethering** in Android Settings on the Server device.
 2. Connect the Client device to the Server's Bluetooth network.
 3. Start the server with `python3 run.py --tcp server`.
