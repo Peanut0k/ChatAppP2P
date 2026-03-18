@@ -1,8 +1,16 @@
 import sys
 import argparse
-import transport
-import protocol
-from ui import ChatUI
+try:
+    import transport
+    import protocol
+    from ui import ChatUI
+except ImportError:
+    print("❌ Error: Missing dependencies.")
+    print("👉 Please use the launcher for your platform:")
+    print("   Linux/Android:  ./run.sh")
+    print("   Windows:        run.bat")
+    import sys
+    sys.exit(1)
 
 def main():
     parser = argparse.ArgumentParser(description="Offline Encrypted Bluetooth Chat")

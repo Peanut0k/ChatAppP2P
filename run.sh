@@ -1,12 +1,8 @@
 #!/bin/bash
 
-# ChatApp Launcher Script
-# This script handles venv creation, installation, and launching the app.
+# --- 🔒 ChatApp Flawless Launcher (Linux/Android) ---
 
 VENV_DIR=".venv"
-PYTHON_BIN="python3"
-
-# 1. Check for Python
 if ! command -v $PYTHON_BIN &> /dev/null; then
     echo "❌ Error: Python 3 is not installed."
     exit 1

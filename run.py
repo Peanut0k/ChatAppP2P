@@ -4,93 +4,64 @@ import platform
 import os
 import shutil
 
-# On Termux, we usually want to use global packages from 'pkg'
+# --- 🔒 ChatApp Flawless Launcher (Universal Python) ---
+
 IS_TERMUX = os.environ.get("TERMUX_VERSION") or os.path.exists("/data/data/com.termux")
 VENV_DIR = ".venv"
 
-def ensure_venv():
-    if IS_TERMUX: return # Termux users should use 'pkg' for cryptography
-    
-    # Check if we are already in a venv
-    if hasattr(sys, 'real_prefix') or (sys.base_prefix != sys.prefix):
-        return
+def setup_termux():
+    print("📱 Detected Android (Termux)")
+    try:
+        import cryptography
+        has_crypto = True
+    except ImportError:
+        has_crypto = False
         
-    print("Checking virtual environment...")
-    venv_python = os.path.join(VENV_DIR, "Scripts", "python.exe") if platform.system() == "Windows" else os.path.join(VENV_DIR, "bin", "python")
+    has_api = shutil.which("termux-bluetooth-scan") is not None
+    
+    if not has_crypto or not has_api:
+        print("📦 Installing Android system dependencies (pkg)...")
+        subprocess.run("pkg update -y && pkg install -y python-cryptography termux-api", shell=True)
+
+def ensure_venv():
+    if IS_TERMUX: return sys.executable
+    
+    # Check if already in venv
+    if hasattr(sys, 'real_prefix') or (sys.base_prefix != sys.prefix):
+        return sys.executable
+        
+    venv_python = os.path.join(VENV_DIR, "Scripts", "python.exe") if platform.system() == "Windows" else os.path.join(VENV_DIR, "bin", "python3")
     
     if not os.path.exists(venv_python):
         print("🛠️ Creating virtual environment...")
-        try:
-            subprocess.check_call([sys.executable, "-m", "venv", VENV_DIR])
-            print("Successfully created venv.")
-        except Exception as e:
-            print(f"Error creating venv: {e}")
-            return # Fallback to global python
-            
-    # Re-run the script using the venv's python
-    print("Switching to virtual environment...")
-    cmd = [venv_python, __file__] + sys.argv[1:]
-    sys.exit(subprocess.call(cmd))
+        subprocess.check_call([sys.executable, "-m", "venv", VENV_DIR])
+        
+    return venv_python
 
-def check_dependencies(is_termux):
-    print("Checking dependencies...")
-    required = ["cryptography", "rich", "prompt_toolkit"]
-    missing = []
-    
-    for lib in required:
-        try:
-            __import__(lib)
-        except ImportError:
-            missing.append(lib)
-            
-    if missing:
-        print(f"Missing libraries: {', '.join(missing)}")
-        if is_termux and "cryptography" in missing:
-            print("\n[!] TERMUX ERROR: cryptography must be installed via 'pkg'.")
-            print("Please run: pkg update && pkg install python-cryptography")
-            print("Then run this launcher again.\n")
-            sys.exit(1)
-            
-        print("Attempting to install via pip...")
-        try:
-            subprocess.check_call([sys.executable, "-m", "pip", "install"] + missing)
-            print("Successfully installed dependencies.")
-        except Exception as e:
-            print(f"\nError installing dependencies: {e}")
-            if is_termux:
-                print("Tip: If pip fails, try 'pkg update' then 'pkg install python-cryptography'.")
-                print("For other libraries: pip install rich prompt_toolkit")
-            else:
-                print("Please run: pip install " + " ".join(required))
-            sys.exit(1)
-
-def detect_platform():
-    if IS_TERMUX: return "Android (Termux)"
-    return platform.system()
-
-def check_system_tools(os_name):
-    print(f"Detected Platform: {os_name}")
-    if os_name == "Linux":
-        if not shutil.which("bluetoothctl"):
-            print("Warning: 'bluetoothctl' not found. Please install 'bluez' for Bluetooth support.")
-    elif os_name == "Android (Termux)":
-        if not shutil.which("termux-bluetooth-scan"):
-            print("Warning: 'termux-api' components not found. Scanning may be limited.")
-            print("Suggestion: pkg install termux-api")
+def check_deps(py_exec):
+    print("📦 Checking dependencies...")
+    # We use -m pip to ensure we target the right environment
+    try:
+        subprocess.check_call([py_exec, "-m", "pip", "install", "rich", "prompt_toolkit", "cryptography"], 
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception as e:
+        print(f"Warning: Could not auto-install some dependencies: {e}")
 
 def main():
-    print("--- 🔒 ChatApp Launcher ---")
-    
-    # Platform-specific auto-setup
-    ensure_venv()
-    
-    os_name = detect_platform()
-    is_termux = os_name == "Android (Termux)"
-    
-    check_system_tools(os_name)
-    check_dependencies(is_termux)
-    
-    print("\nStarting ChatApp...\n")
+    if IS_TERMUX:
+        setup_termux()
+        py_exec = sys.executable
+    else:
+        py_exec = ensure_venv()
+        
+    # If we just switched to a venv, re-run with current args
+    if py_exec != sys.executable:
+        print("🚀 Switching to environment and starting...")
+        subprocess.run([py_exec, __file__] + sys.argv[1:])
+        sys.exit(0)
+
+    check_deps(py_exec)
+    print("🚀 Starting ChatApp...")
     
     cmd = [sys.executable, "chat.py"] + sys.argv[1:]
     try:
