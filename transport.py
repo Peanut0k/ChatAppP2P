@@ -5,6 +5,7 @@ import os
 import sys
 import platform
 import re
+import threading
 
 # Platform detection
 IS_WINDOWS = platform.system() == "Windows"
@@ -33,11 +34,13 @@ class Transport:
 class BluetoothTransport(Transport):
     def __init__(self, sock=None):
         self.sock = sock
+        self._lock = threading.Lock()
 
     def send_framed(self, data: bytes):
-        length = len(data)
-        header = struct.pack(">I", length)
-        self.sock.sendall(header + data)
+        with self._lock:
+            length = len(data)
+            header = struct.pack(">I", length)
+            self.sock.sendall(header + data)
 
     def recv_framed(self) -> bytes:
         header = self._recv_exact(4)
@@ -198,6 +201,15 @@ def _scan_windows():
     except Exception as e:
         print(f"Windows scan error: {e}")
         return []
+
+def format_size(size_bytes):
+    if size_bytes == 0: return "0B"
+    size_name = ("B", "KB", "MB", "GB", "TB")
+    import math
+    i = int(math.floor(math.log(size_bytes, 1024)))
+    p = math.pow(1024, i)
+    s = round(size_bytes / p, 1)
+    return f"{s}{size_name[i]}"
 
 if __name__ == "__main__":
     # Test framing using a mock loopback socket pair if desired

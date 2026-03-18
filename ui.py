@@ -185,17 +185,24 @@ class ChatUI:
                         save_path = save_dir / file_meta["name"]
                         incoming_file = open(save_path, "wb")
                         self.total_received = 0
-                        self.recv_progress_id = self.add_message("System", f"📥 Receiving: {file_meta['name']} (0%)")
+                        from transport import format_size
+                        fsize_str = format_size(file_meta['size'])
+                        self.recv_progress_id = self.add_message("System", f"📥 Receiving: {file_meta['name']} (0B / {fsize_str}, 0%)")
                     elif msg_type == "file_chunk" and incoming_file:
                         incoming_file.write(content)
                         self.total_received += len(content)
                         if file_meta['size'] > 0:
                             pct = int((self.total_received / file_meta['size']) * 100)
-                            if pct % 5 == 0: # Update every 10%
-                                self.update_message(self.recv_progress_id, f"📥 Receiving: {file_meta['name']} ({pct}%)")
+                            if pct % 5 == 0:
+                                from transport import format_size
+                                cur_str = format_size(self.total_received)
+                                tot_str = format_size(file_meta['size'])
+                                self.update_message(self.recv_progress_id, f"📥 Receiving: {file_meta['name']} ({cur_str} / {tot_str}, {pct}%)")
                     elif msg_type == "file_end" and incoming_file:
                         incoming_file.close()
-                        self.update_message(self.recv_progress_id, f"✅ Received: {file_meta['name']} (100%)")
+                        from transport import format_size
+                        tot_str = format_size(file_meta['size'])
+                        self.update_message(self.recv_progress_id, f"✅ Received: {file_meta['name']} ({tot_str}, 100%)")
                         
                         if file_meta['name'].startswith("voice_") and file_meta['name'].endswith(".wav"):
                             self.voice_pending_path = save_path
