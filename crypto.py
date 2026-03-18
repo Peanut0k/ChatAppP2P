@@ -1,8 +1,26 @@
 import os
-from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import x25519
-from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
+from pathlib import Path
+
+IDENTITY_FILE = Path.home() / ".config" / "chatapp" / "identity.key"
+
+def get_device_identity():
+    """Returns (private_key, public_key) for the device, generating if needed."""
+    if not IDENTITY_FILE.exists():
+        IDENTITY_FILE.parent.mkdir(parents=True, exist_ok=True)
+        private_key = x25519.X25519PrivateKey.generate()
+        with open(IDENTITY_FILE, "wb") as f:
+            f.write(private_key.private_bytes(
+                encoding=serialization.Encoding.Raw,
+                format=serialization.PrivateFormat.Raw,
+                encryption_algorithm=serialization.NoEncryption()
+            ))
+    else:
+        with open(IDENTITY_FILE, "rb") as f:
+            private_key = x25519.X25519PrivateKey.from_private_bytes(f.read())
+    
+    return private_key, private_key.public_key()
 
 def generate_keypair():
     """Generates an ephemeral X25519 private and public key."""

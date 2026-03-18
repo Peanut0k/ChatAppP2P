@@ -2,23 +2,21 @@ import crypto
 import trust
 import struct
 
-PROTOCOL_VERSION = 1
+PROTOCOL_VERSION = 2
 
 class ChatProtocol:
     def __init__(self, transport, peer_mac):
         self.transport = transport
         self.peer_mac = peer_mac
         self.session_key = None
-        self.my_public_key_bytes = None
-        self.peer_public_key_bytes = None
+        self.my_id_pub = None
+        self.peer_id_pub = None
         self.safety_number = None
         self.trust_status = "new"
 
     def handshake(self):
         """
         Executes the X25519 handshake and verifies peer trust.
-        Also verifies protocol version.
-        Returns the trust status: "trusted", "new", or "untrusted".
         """
         print("Handshaking...")
         
@@ -33,31 +31,38 @@ class ChatProtocol:
             raise ConnectionError(f"Protocol version mismatch: Mine={PROTOCOL_VERSION}, Peer={peer_version}")
 
         # 2. Key Exchange
-        my_priv, my_pub = crypto.generate_keypair()
-        self.my_public_key_bytes = my_pub.public_bytes_raw()
+        # Get permanent identity and generate fresh ephemeral key
+        id_priv, id_pub = crypto.get_device_identity()
+        eph_priv, eph_pub = crypto.generate_keypair()
         
-        # Send my public key
-        self.transport.send_framed(self.my_public_key_bytes)
+        self.my_id_pub = id_pub.public_bytes_raw()
+        my_eph_pub = eph_pub.public_bytes_raw()
         
-        # Receive peer's public key
-        self.peer_public_key_bytes = self.transport.recv_framed()
-        if not self.peer_public_key_bytes:
+        # Send Identity + Ephemeral keys (64 bytes total)
+        self.transport.send_framed(self.my_id_pub + my_eph_pub)
+        
+        # Receive Peer's Identity + Ephemeral keys
+        peer_keys = self.transport.recv_framed()
+        if not peer_keys or len(peer_keys) < 64:
             raise ConnectionError("Disconnected during handshake (key exchange)")
         
-        # Derive shared session key
-        self.session_key = crypto.derive_session_key(my_priv, self.peer_public_key_bytes)
+        self.peer_id_pub = peer_keys[:32]
+        peer_eph_pub = peer_keys[32:64]
         
-        # Calculate safety number
-        self.safety_number = crypto.get_safety_number(self.my_public_key_bytes, self.peer_public_key_bytes)
+        # Derive session key from ephemeral keys (Forward Secrecy)
+        self.session_key = crypto.derive_session_key(eph_priv, peer_eph_pub)
         
-        # Verify Trust
-        self.trust_status = trust.verify_peer(self.peer_mac, self.peer_public_key_bytes)
+        # Calculate safety number from permanent identity keys
+        self.safety_number = crypto.get_safety_number(self.my_id_pub, self.peer_id_pub)
+        
+        # Verify Trust using the permanent identity
+        self.trust_status = trust.verify_peer(self.peer_mac, self.peer_id_pub)
         print(f"Handshake complete. Trust: {self.trust_status}")
         return self.trust_status
 
     def mark_as_trusted(self):
         """Manually marks the current peer as trusted."""
-        trust.save_trusted_peer(self.peer_mac, self.peer_public_key_bytes)
+        trust.save_trusted_peer(self.peer_mac, self.peer_id_pub)
         self.trust_status = "trusted"
 
     def send_message(self, text):
