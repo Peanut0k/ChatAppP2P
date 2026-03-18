@@ -61,11 +61,16 @@ def main():
                     role = "Client"
                     peer_id = mac
                     
-                # Handshake
+                # Handshake metadata
                 try:
                     peer_info = trans.sock.getpeername()
-                    peer_mac = peer_id if args.mode == "client" else peer_info[0]
-                except:
+                    if args.mode == "client":
+                        peer_mac = peer_id
+                    elif peer_info and len(peer_info) > 0:
+                        peer_mac = peer_info[0]
+                    else:
+                        peer_mac = peer_id
+                except Exception:
                     peer_mac = peer_id # Fallback
                 proto = protocol.ChatProtocol(trans, peer_mac)
                 trust_status = proto.handshake()

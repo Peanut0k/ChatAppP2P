@@ -71,12 +71,16 @@ def unblock_bluetooth():
     except Exception: pass
 
 def get_local_adapter_mac():
-    if IS_WINDOWS: return "00:00:00:00:00:00"
-    if IS_TERMUX: return "00:00:00:00:00:00" 
+    if IS_WINDOWS or IS_TERMUX: return "00:00:00:00:00:00" 
     try:
+        # Use 'bluetoothctl show' and look for the MAC address
         output = subprocess.check_output(["bluetoothctl", "show"], text=True)
         for line in output.split("\n"):
-            if "Controller" in line: return line.split()[1]
+            line = line.strip()
+            if line.startswith("Controller"):
+                parts = line.split()
+                if len(parts) > 1:
+                    return parts[1]
     except Exception: pass
     return "00:00:00:00:00:00"
 
