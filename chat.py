@@ -114,8 +114,8 @@ def main():
                         try:
                             ui.add_message("System", "🎤 Recording... (Type /voice or press Enter to stop)")
                             if os.environ.get("TERMUX_VERSION"):
-                                 # Termux (Android)
-                                 voice_ctx["proc"] = subprocess.Popen(["termux-microphone-record", "-f", str(out_path)], preexec_fn=os.setsid)
+                                 # Termux (Android) - Force WAV for compatibility
+                                 voice_ctx["proc"] = subprocess.Popen(["termux-microphone-record", "-f", str(out_path), "-e", "wav"], preexec_fn=os.setsid)
                             elif platform.system() == "Linux":
                                  # Linux (ALSA) - Standardize to 16kHz Mono to avoid noise on Android/Arch
                                  voice_ctx["proc"] = subprocess.Popen(["arecord", "-f", "S16_LE", "-r", "16000", "-c", "1", str(out_path)], preexec_fn=os.setsid)
