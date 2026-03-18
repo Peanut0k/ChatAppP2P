@@ -126,6 +126,7 @@ def main():
                         except Exception as e:
                             ui.add_message("System", f"❌ Recording failed to start: {e}")
                             ui.is_recording = False
+                    else:
                         # Stop recording
                         if voice_ctx["proc"] or os.environ.get("TERMUX_VERSION"):
                             try:
