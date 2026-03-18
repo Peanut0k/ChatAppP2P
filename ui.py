@@ -28,6 +28,7 @@ class ChatUI:
         self.explorer_path = None
         self.explorer_selection = 0
         self.explorer_items = []
+        self.voice_pending_path = None
         self.messages = []
         self._stop_event = threading.Event()
         self.app = None
@@ -168,8 +169,9 @@ class ChatUI:
                         self.add_message("System", f"✅ File received: {file_meta['name']}")
                         
                         if file_meta['name'].startswith("voice_") and file_meta['name'].endswith(".wav"):
-                            self.add_message("System", f"🎙️ Voice clip ready! Type /play to hear it.")
-                            
+                            self.voice_pending_path = save_path
+                            self.add_message("System", f"🎙️ Voice clip received! Play now? [Enter] Yes | [Esc] No")
+                            if self.app: self.app.invalidate()
                         incoming_file = None
                     elif msg_type == "read_ack":
                         self._mark_message_seen(content)
@@ -251,7 +253,7 @@ class ChatUI:
                     return True
 
                 elif text.lower() == "/play":
-                    self._play_voice_clip()
+                    # Removed in favor of interactive prompt
                     input_field.text = ""
                     return True
                 
@@ -288,7 +290,10 @@ class ChatUI:
             wrap_lines=True,
         )
 
-        legend_text = ANSI(" [dim]Legend: [Enter] Send/Stop | /play | /send (Explorer) | /voice | /help[/]")
+        if self.voice_pending_path:
+            legend_text = ANSI(" [dim]PROMPT: [Enter] Play Voice | [Esc] Dismiss [/]")
+        else:
+            legend_text = ANSI(" [dim]Legend: [Enter] Send/Stop | /send (Explorer) | /voice | /help[/]")
         
         root_container = HSplit([
             # Empty Window here acts as a spacer that pushes history to the bottom
@@ -322,14 +327,28 @@ class ChatUI:
 
         @kb.add("enter")
         def _(event):
-            if self.explorer_visible:
+            if self.voice_pending_path:
+                path = self.voice_pending_path
+                self.voice_pending_path = None
+                self._play_voice_clip(path)
+            elif self.explorer_visible:
                 self._handle_explorer_key("enter")
             else:
                 accept_text(event.current_buffer)
 
         @kb.add("escape")
         def _(event):
-            if self.explorer_visible:
+            if self.voice_pending_path:
+                path = self.voice_pending_path
+                self.voice_pending_path = None
+                try: 
+                    import os
+                    if os.path.exists(path): os.remove(path)
+                except: pass
+                self.add_message("System", "🗑️ Voice clip dismissed and deleted.")
+                self._update_history()
+                if self.app: self.app.invalidate()
+            elif self.explorer_visible:
                 self.explorer_visible = False
                 self._update_history()
                 if self.app: self.app.invalidate()
@@ -347,43 +366,29 @@ class ChatUI:
         finally:
             self._stop_event.set()
 
-    def _play_voice_clip(self):
+    def _play_voice_clip(self, path):
         import os, subprocess, platform, threading, time
-        from pathlib import Path
         
-        # Find the most recent voice file in the downloads folder
-        save_dir = Path.home() / "Downloads" / "ChatApp"
-        if not save_dir.exists():
-            self.add_message("System", "⚠️ No voice clips found.")
-            return
-            
-        voice_files = sorted([f for f in os.listdir(save_dir) if f.startswith("voice_") and f.endswith(".wav")])
-        if not voice_files:
-            self.add_message("System", "⚠️ No voice clips found to play.")
-            return
-            
-        target_file = save_dir / voice_files[-1]
-        
-        def play_task(path):
+        def play_task(target_path):
             try:
                 self.add_message("System", f"🔊 Playing voice clip...")
                 if os.environ.get("TERMUX_VERSION"):
-                    subprocess.run(["termux-media-player", "play", str(path)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    subprocess.run(["termux-media-player", "play", str(target_path)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 elif platform.system() == "Linux":
                     import shutil
                     if shutil.which("ffplay"):
-                        subprocess.run(["ffplay", "-nodisp", "-autoexit", str(path)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        subprocess.run(["ffplay", "-nodisp", "-autoexit", str(target_path)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                     else:
-                        subprocess.run(["aplay", "-q", str(path)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        subprocess.run(["aplay", "-q", str(target_path)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 
                 # Auto-delete after playing
-                os.remove(path)
+                if os.path.exists(target_path): os.remove(target_path)
                 self.add_message("System", "🗑️ Voice clip played and deleted for privacy.")
                 if self.app: self.app.invalidate()
             except Exception as e:
                 self.add_message("System", f"⚠️ Playback failed: {e}")
 
-        threading.Thread(target=play_task, args=(target_file,), daemon=True).start()
+        threading.Thread(target=play_task, args=(path,), daemon=True).start()
 
     def _open_file_explorer(self, path=None):
         import os
