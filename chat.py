@@ -1,5 +1,6 @@
 import sys
 import argparse
+import socket
 try:
     import transport
     import protocol
