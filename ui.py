@@ -146,8 +146,9 @@ class ChatUI:
         self._current_ansi = ANSI(raw_text)
         self._line_count = raw_text.count('\n') + 1
 
-    def start(self, send_callback, receive_callback, trust_callback=None, typing_callback=None, file_send_callback=None, ack_callback=None, voice_record_callback=None):
+    def start(self, send_callback, receive_callback, trust_callback=None, typing_callback=None, file_send_callback=None, ack_callback=None, voice_record_callback=None, resume_callback=None):
         self.send_callback = send_callback
+        self.resume_callback = resume_callback
         self.trust_callback = trust_callback
         self.typing_callback = typing_callback
         self.file_send_callback = file_send_callback
