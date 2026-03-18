@@ -10,6 +10,7 @@ from prompt_toolkit.layout.layout import Layout
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.widgets import TextArea
 from prompt_toolkit.formatted_text import ANSI
+from prompt_toolkit.data_structures import Point
 import threading
 import queue
 import io
@@ -24,18 +25,19 @@ class ChatUI:
         self.app = None
         self.send_callback = None
         self._current_ansi = ANSI("")
+        self._line_count = 0
         
-        # We'll use a FormattedTextControl to show the ANSI from Rich
-        self.history_control = FormattedTextControl(lambda: self._current_ansi)
+        # Use get_cursor_position to force the window to always be at the bottom
+        self.history_control = FormattedTextControl(
+            lambda: self._current_ansi,
+            get_cursor_position=lambda: Point(x=0, y=self._line_count)
+        )
 
     def add_message(self, sender, text):
         self.messages.append((sender, text))
         self._update_history()
         if self.app:
             self.app.invalidate()
-        # Scroll to bottom after adding
-        if hasattr(self, 'history_window'):
-            self.history_window.vertical_scroll = 999999
 
     def _update_history(self):
         """Builds the full chat history in Rich and converts to ANSI."""
@@ -63,7 +65,9 @@ class ChatUI:
         console.print("-" * 78, style="dim")
         console.print(Text(f"Safety: {self.safety_number}", style="italic dim yellow"))
         
-        self._current_ansi = ANSI(buf.getvalue())
+        raw_text = buf.getvalue()
+        self._current_ansi = ANSI(raw_text)
+        self._line_count = raw_text.count('\n') + 1
 
     def start(self, send_callback, receive_callback):
         self.send_callback = send_callback
@@ -120,6 +124,8 @@ class ChatUI:
         )
 
         root_container = HSplit([
+            # Empty Window here acts as a spacer that pushes history to the bottom
+            Window(), 
             self.history_window,
             Window(height=1, char="─", style="dim"),
             input_field,
