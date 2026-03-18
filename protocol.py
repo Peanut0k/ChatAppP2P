@@ -122,6 +122,10 @@ class ChatProtocol:
             return "file_resume", struct.unpack(">Q", payload)[0]
         elif msg_type == 8: # VOICE Played Ack
             return "voice_ack", payload.decode('utf-8')
+        elif msg_type == 9: # VOICE Dismissed
+            return "voice_dismiss", payload.decode('utf-8')
+        elif msg_type == 10: # FILE Rejected
+            return "file_reject", payload.decode('utf-8')
         
         return "unknown", payload
 
@@ -144,3 +148,9 @@ class ChatProtocol:
 
     def send_voice_ack(self, filename):
         self._send_raw(b'\x08' + filename.encode('utf-8'))
+
+    def send_voice_dismiss(self, filename):
+        self._send_raw(b'\x09' + filename.encode('utf-8'))
+
+    def send_file_reject(self, filename):
+        self._send_raw(b'\x0a' + filename.encode('utf-8'))

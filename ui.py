@@ -48,6 +48,9 @@ class ChatUI:
         self.scroll_index = 0
         self.auto_scroll = True
         self.header_ansi = ANSI("")
+        self.file_abort_event = threading.Event()
+        self.file_accept_event = threading.Event()
+        self.file_pending_meta = None
         
         # Use get_cursor_position to handle vertical scrolling
         def get_pos():
@@ -145,8 +148,12 @@ class ChatUI:
                     max_bw = min(width - 10, int(width * 0.7))
                     projected_width = len(text) + 4
                     p_width = max_bw if projected_width > max_bw else None
-                    heard_indicator = " [bold green][Heard][/]" if msg.get("played", False) else ""
-                    p = Panel(Text(text + heard_indicator), border_style="green", padding=(0, 1), title="[bold]The Other Guy", title_align="left", width=p_width, expand=False)
+                    suffix = ""
+                    if msg.get("played", False): suffix = " [bold green][Heard][/]"
+                    elif msg.get("dismissed", False): suffix = " [bold yellow][Dismissed][/]"
+                    elif msg.get("rejected", False): suffix = " [bold red][Rejected][/]"
+                    
+                    p = Panel(Text(text + suffix), border_style="green", padding=(0, 1), title="[bold]The Other Guy", title_align="left", width=p_width, expand=False)
                     console.print(Align.left(p, width=width))
                 else:
                     console.print(Align.center(Text(text, style="italic dim yellow")))
@@ -159,6 +166,22 @@ class ChatUI:
         raw_text = buf.getvalue()
         self._current_ansi = ANSI(raw_text)
         self._line_count = raw_text.count('\n') + 1
+
+    def _mark_voice_dismissed(self, filename):
+        updated = False
+        for msg in self.messages:
+            if filename in msg.get("text", ""):
+                 msg["dismissed"] = True
+                 updated = True
+        if updated: self._update_history()
+
+    def _mark_file_rejected(self, filename):
+        updated = False
+        for msg in self.messages:
+            if filename in msg.get("text", ""):
+                 msg["rejected"] = True
+                 updated = True
+        if updated: self._update_history()
         
         if self.auto_scroll:
             self.scroll_index = max(0, self._line_count - 1)
@@ -166,10 +189,12 @@ class ChatUI:
         if self.app:
             self.app.invalidate()
 
-    def start(self, send_callback, receive_callback, trust_callback=None, typing_callback=None, file_send_callback=None, ack_callback=None, voice_record_callback=None, resume_callback=None, voice_ack_callback=None):
+    def start(self, send_callback, receive_callback, trust_callback=None, typing_callback=None, file_send_callback=None, ack_callback=None, voice_record_callback=None, resume_callback=None, voice_ack_callback=None, voice_dismiss_callback=None, file_reject_callback=None):
         self.send_callback = send_callback
         self.resume_callback = resume_callback
         self.voice_ack_callback = voice_ack_callback
+        self.voice_dismiss_callback = voice_dismiss_callback
+        self.file_reject_callback = file_reject_callback
         self.trust_callback = trust_callback
         self.typing_callback = typing_callback
         self.file_send_callback = file_send_callback
@@ -205,6 +230,25 @@ class ChatUI:
                         if self.app: self.app.invalidate()
                     elif msg_type == "file_start":
                         file_meta = content
+                        self.file_pending_meta = file_meta
+                        from transport import format_size
+                        self.add_message("System", f"📥 Incoming file: {file_meta['name']} ({format_size(file_meta['size'])}). [Enter] Accept | [Esc] Reject")
+                        self._update_history()
+                        if self.app: self.app.invalidate()
+                        
+                        # Wait for user choice (Accept via Enter or Reject via Esc)
+                        self.file_accept_event.clear()
+                        self.file_abort_event.clear()
+                        
+                        # Wait until accepted or rejected or stop
+                        while not self.file_accept_event.is_set() and not self.file_abort_event.is_set() and not self._stop_event.is_set():
+                            time.sleep(0.1)
+                            
+                        if self.file_abort_event.is_set() or self._stop_event.is_set():
+                            self.file_pending_meta = None
+                            continue
+                            
+                        self.file_pending_meta = None
                         save_dir = Path.home() / "Downloads" / "ChatApp"
                         save_dir.mkdir(parents=True, exist_ok=True)
                         save_path = save_dir / file_meta["name"]
@@ -267,6 +311,12 @@ class ChatUI:
                         self._mark_message_seen(content)
                     elif msg_type == "voice_ack":
                         self._mark_voice_played(content)
+                    elif msg_type == "voice_dismiss":
+                        self._mark_voice_dismissed(content)
+                    elif msg_type == "file_reject":
+                        # Also handle if we are the sender and the peer rejected
+                        self.file_abort_event.set()
+                        self._mark_file_rejected(content)
                     elif msg_type == "file_resume":
                         self.requested_resume_offset = content
                         self.resume_event.set() # Wake up the sender
@@ -439,6 +489,8 @@ class ChatUI:
                 path = self.voice_pending_path
                 self.voice_pending_path = None
                 self._play_voice_clip(path)
+            elif self.file_pending_meta:
+                self.file_accept_event.set()
             elif self.explorer_visible:
                 self._handle_explorer_key("enter")
             else:
@@ -463,12 +515,29 @@ class ChatUI:
         def _(event):
             if self.voice_pending_path:
                 path = self.voice_pending_path
+                filename = os.path.basename(path)
                 self.voice_pending_path = None
+                if self.voice_ack_callback: # Actually use the dismiss callback if we separate them, but for now reuse ack_callback or just handle it
+                     # I will just call a generic callback or handle it in protocol
+                     pass
+                # Send dismissal ack!
+                # I need access to proto here or a callback. Let's add voice_dismiss_callback.
+                if hasattr(self, 'voice_dismiss_callback') and self.voice_dismiss_callback:
+                    self.voice_dismiss_callback(filename)
+
                 try: 
-                    import os
                     if os.path.exists(path): os.remove(path)
                 except: pass
                 self.add_message("System", "🗑️ Voice clip dismissed and deleted.")
+                self._update_history()
+                if self.app: self.app.invalidate()
+            elif self.file_pending_meta:
+                meta = self.file_pending_meta
+                self.file_pending_meta = None
+                if hasattr(self, 'file_reject_callback') and self.file_reject_callback:
+                    self.file_reject_callback(meta["name"])
+                self.file_abort_event.set()
+                self.add_message("System", f"🛑 File rejected: {meta['name']}")
                 self._update_history()
                 if self.app: self.app.invalidate()
             elif self.explorer_visible:

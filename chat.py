@@ -130,6 +130,7 @@ def main():
                     proto.send_file_start(filename, size, f_hash)
                     # 3. Wait for Resume Offset (Event-based Handshake)
                     ui.resume_event.clear()
+                    ui.file_abort_event.clear()
                     progress_id = ui.add_message("System", f"📤 Negotiating connection for {filename}...")
                     
                     # Wait for receiver to signal offset (up to 10s)
@@ -152,6 +153,10 @@ def main():
                             ui.update_message(progress_id, f"📤 Sending: {filename} (0B / {tot_str})")
 
                         while True:
+                            if ui.file_abort_event.is_set():
+                                ui.update_message(progress_id, f"❌ Transfer aborted: {filename} (Rejected by peer)")
+                                return
+                                
                             chunk = f.read(16 * 1024)
                             if not chunk:
                                 break
@@ -260,7 +265,9 @@ def main():
                     ack_callback=lambda mid: proto.send_read_ack(mid),
                     voice_record_callback=handle_voice_record,
                     resume_callback=lambda off: proto.send_file_resume(off),
-                    voice_ack_callback=lambda fname: proto.send_voice_ack(fname)
+                    voice_ack_callback=lambda fname: proto.send_voice_ack(fname),
+                    voice_dismiss_callback=lambda fname: proto.send_voice_dismiss(fname),
+                    file_reject_callback=lambda fname: proto.send_file_reject(fname)
                 )
                 
                 # If UI exits normally (via /quit), break out of loop
