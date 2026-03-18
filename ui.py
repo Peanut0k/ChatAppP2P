@@ -178,8 +178,12 @@ class ChatUI:
                                     if os.environ.get("TERMUX_VERSION"):
                                         subprocess.run(["termux-media-player", "play", str(path)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                                     elif platform.system() == "Linux":
-                                        # Use standard aplay, it should auto-detect the header correctly
-                                        subprocess.run(["aplay", "-q", str(path)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                        import shutil
+                                        # Use ffplay if available (much more robust than aplay)
+                                        if shutil.which("ffplay"):
+                                            subprocess.run(["ffplay", "-nodisp", "-autoexit", str(path)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                        else:
+                                            subprocess.run(["aplay", "-q", str(path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                                     
                                     if self.app: self.app.invalidate()
                                 except: pass
