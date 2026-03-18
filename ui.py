@@ -18,7 +18,7 @@ import time
 import os
 
 class ChatUI:
-    def __init__(self, role, peer_mac, safety_number, trust_status="new"):
+    def __init__(self, role, peer_mac, safety_number, trust_status="new", initial_messages=None):
         self.role = role
         self.peer_mac = peer_mac
         self.safety_number = safety_number
@@ -31,7 +31,7 @@ class ChatUI:
         self.explorer_selection = 0
         self.explorer_items = []
         self.voice_pending_path = None
-        self.messages = []
+        self.messages = initial_messages if initial_messages is not None else []
         self.recv_progress_id = None
         self.total_received = 0
         self.requested_resume_offset = 0

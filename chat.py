@@ -53,6 +53,9 @@ def main():
         sys.exit(1)
         
     cleanup_temp_files()
+    persisted_history = []
+    chosen_mac = args.mac if args.mode == "client" else None
+    
     try:
         while True: # Auto-Reconnect Loop
             try:
@@ -61,46 +64,53 @@ def main():
                     role = "Server"
                     peer_id = "Waiting..." 
                 else:
-                    mac = args.mac
+                    mac = chosen_mac
                     if not mac:
-                        devices = transport.scan_for_devices()
-                        if not devices:
-                            print("No devices found.")
-                            return
-                        print("\nDiscovered Devices:")
-                        for i, (addr, name) in enumerate(devices):
-                            print(f"{i+1}. {addr} - {name}")
-                        try:
-                            choice = int(input("\nSelect a device (number): ")) - 1
-                            if 0 <= choice < len(devices):
-                                mac = devices[choice][0]
-                            else:
-                                print("Invalid choice.")
+                        if args.tcp:
+                            mac = input("Enter server IP address: ").strip()
+                            if not mac: return
+                            chosen_mac = mac
+                        else:
+                            devices = transport.scan_for_devices()
+                            if not devices:
+                                print("No devices found.")
                                 return
-                        except ValueError:
-                            print("Invalid input.")
-                            return
+                            print("\nDiscovered Devices:")
+                            for i, (addr, name) in enumerate(devices):
+                                print(f"{i+1}. {addr} - {name}")
+                            try:
+                                choice = int(input("\nSelect a device (number): ")) - 1
+                                if 0 <= choice < len(devices):
+                                    mac = devices[choice][0]
+                                    chosen_mac = mac # Remember for reconnection
+                                else:
+                                    print("Invalid choice.")
+                                    return
+                            except ValueError:
+                                print("Invalid input.")
+                                return
                     
                     trans = transport.start_client(mac, use_tcp=args.tcp)
                     role = "Client"
                     peer_id = mac
                     
                 # Handshake metadata
+                peer_mac = peer_id # Fallback
                 try:
-                    peer_info = trans.sock.getpeername()
-                    if args.mode == "client":
-                        peer_mac = peer_id
-                    elif peer_info and len(peer_info) > 0:
-                        peer_mac = peer_info[0]
-                    else:
-                        peer_mac = peer_id
+                    if trans.sock:
+                        peer_info = trans.sock.getpeername()
+                        if args.mode == "client":
+                            peer_mac = peer_id
+                        elif peer_info and len(peer_info) > 0:
+                            peer_mac = peer_info[0]
                 except Exception:
-                    peer_mac = peer_id # Fallback
+                    pass
+                
                 proto = protocol.ChatProtocol(trans, peer_mac)
                 trust_status = proto.handshake()
                 
                 # Start UI
-                ui = ChatUI(role, peer_mac, proto.safety_number, trust_status)
+                ui = ChatUI(role, peer_mac, proto.safety_number, trust_status, initial_messages=persisted_history)
                 
                 def mark_trusted_wrapper():
                     proto.mark_as_trusted()
