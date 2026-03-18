@@ -101,7 +101,7 @@ class ChatUI:
                 if sender == "You":
                     # Max width for bubbles is 2/3 of terminal
                     bubble_width = min(width - 10, int(width * 0.7))
-                    seen_indicator = " [green]✓✓[/]" if is_seen else ""
+                    seen_indicator = " ✓✓" if is_seen else ""
                     p = Panel(Text(text + seen_indicator), border_style="blue", padding=(0, 1), title="[bold]You", title_align="right", width=bubble_width)
                     console.print(Align.right(p, width=width))
                 elif sender == "Peer":
@@ -171,7 +171,10 @@ class ChatUI:
                         if file_meta['name'].startswith("voice_") and file_meta['name'].endswith(".wav"):
                             self.voice_pending_path = save_path
                             self.add_message("System", f"🎙️ Voice clip received! Play now? [Enter] Yes | [Esc] No")
-                            if self.app: self.app.invalidate()
+                            if self.app:
+                                if os.environ.get("TERMUX_VERSION"):
+                                    self.app.renderer.clear() # Hard reset for Termux
+                                self.app.invalidate()
                         incoming_file = None
                     elif msg_type == "read_ack":
                         self._mark_message_seen(content)
