@@ -1,6 +1,14 @@
 import sys
 import argparse
 import socket
+import os
+import time
+import threading
+import platform
+import subprocess
+import signal
+from pathlib import Path
+
 try:
     import transport
     import protocol
@@ -146,13 +154,16 @@ def main():
                                 if path and path.exists():
                                     handle_file_send(str(path), path.name, path.stat().st_size)
                                     
-                                    # Auto-delete from sender's end after a brief delay
+                                    # Auto-delete from sender's end (Retry loop for robustness)
                                     def purge_task(p):
-                                        import time, os
-                                        try:
-                                            time.sleep(2) # Wait for protocol to read
-                                            if os.path.exists(p): os.remove(p)
-                                        except: pass
+                                        for _ in range(5):
+                                            try:
+                                                time.sleep(2)
+                                                if os.path.exists(p):
+                                                    os.remove(p)
+                                                    break # Success!
+                                            except:
+                                                pass
                                     threading.Thread(target=purge_task, args=(str(path),), daemon=True).start()
                             except Exception as e:
                                 ui.add_message("System", f"❌ Error stopping recording: {e}")
