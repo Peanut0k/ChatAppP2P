@@ -137,6 +137,8 @@ class ChatUI:
         def recv_thread():
             incoming_file = None
             file_meta = None
+            save_path = None
+            from pathlib import Path
             
             while not self._stop_event.is_set():
                 try:
@@ -154,7 +156,6 @@ class ChatUI:
                         if self.app: self.app.invalidate()
                     elif msg_type == "file_start":
                         file_meta = content
-                        from pathlib import Path
                         save_dir = Path.home() / "Downloads" / "ChatApp"
                         save_dir.mkdir(parents=True, exist_ok=True)
                         save_path = save_dir / file_meta["name"]
@@ -168,18 +169,21 @@ class ChatUI:
                         
                         # Auto-play voice memos
                         if file_meta['name'].startswith("voice_") and file_meta['name'].endswith(".wav"):
-                            def play_task():
-                                import subprocess, os, platform
+                            def play_task(path, name):
+                                import subprocess, os, platform, time
                                 try:
-                                    save_path = Path.home() / "Downloads" / "ChatApp" / file_meta['name']
+                                    time.sleep(0.1) # Small delay to ensure file is closed
+                                    if not path.exists(): return
+
                                     if os.environ.get("TERMUX_VERSION"):
-                                        subprocess.run(["termux-media-player", "play", str(save_path)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                        subprocess.run(["termux-media-player", "play", str(path)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                                     elif platform.system() == "Linux":
-                                        subprocess.run(["aplay", "-q", "-t", "wav", str(save_path)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                                    # Force full redraw to fix terminal corruption
+                                        # Use standard aplay, it should auto-detect the header correctly
+                                        subprocess.run(["aplay", "-q", str(path)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                    
                                     if self.app: self.app.invalidate()
                                 except: pass
-                            threading.Thread(target=play_task, daemon=True).start()
+                            threading.Thread(target=play_task, args=(save_path, file_meta['name']), daemon=True).start()
                             
                         incoming_file = None
                     elif msg_type == "read_ack":
