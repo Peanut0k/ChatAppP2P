@@ -138,7 +138,7 @@ def main():
                                     voice_ctx["proc"].wait(timeout=2)
                                 
                                 # Force redraw to fix UI corruption
-                                if ui.app: ui.app.renderer.clear()
+                                if ui.app: ui.app.invalidate()
                                 
                                 ui.add_message("System", "✅ Recording finished!")
                                 
